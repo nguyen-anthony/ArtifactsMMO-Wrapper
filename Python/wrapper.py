@@ -1516,7 +1516,7 @@ class ArtifactsAPI:
             for item in inventory_data if item["code"]
         ]
 
-        self.character = PlayerData(
+        self.char = PlayerData(
             name=data["name"],
             level=data["level"],
             xp=data["xp"],
@@ -1589,4 +1589,4 @@ class ArtifactsAPI:
             inventory_max_items=data["inventory_max_items"],
             inventory=player_inventory
         )
-        return self.character
+        return self.char

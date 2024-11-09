@@ -115,7 +115,7 @@ class ContentMaps:
     cooking_workshop: Tuple[int, int] = (1, 1)
     weaponcrafting_workshop: Tuple[int, int] = (2, 1)
     gearcrafting_workshop: Tuple[int, int] = (3, 1)
-    bank: Tuple[int, int] = (7, 13)
+    bank: Tuple[int, int] = (4, 1)
     grand_exchange: Tuple[int, int] = (5, 1)
     owlbear: Tuple[int, int] = (10, 2)
     cow: Tuple[int, int] = (0, 2)
@@ -149,7 +149,6 @@ class ContentMaps:
     cultist_acolyte: Tuple[int, int] = (-1, 14)
     taskmaster_items: Tuple[int, int] = (4, 13)
     nettle: Tuple[int, int] = (7, 14)
-    
     
 @dataclass
 class Position:
@@ -328,7 +327,10 @@ class PlayerData:
         Returns:
             int: Number of available inventory slots.
         """
-        return self.inventory_max_items - len(self.inventory)
+        items = 0
+        for item in self.inventory:
+            items += item.quantity
+        return self.inventory_max_items - items
 
     def has_item(self, item_code: str) -> Tuple[bool, int]:
         """
@@ -472,8 +474,7 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/move"
         json = {"x": x, "y": y}
         res = self.api._make_request("POST", endpoint, json=json)
-        if res.status_code == 200:
-            self.api.wait_for_cooldown()
+        self.api.wait_for_cooldown()
         return res
 
     def rest(self) -> dict:
@@ -1471,7 +1472,7 @@ class ArtifactsAPI:
             case 491:
                 raise APIException.EquipmentSlot(m)
             case 490:
-                self._print(m)
+                self._print(message)
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
         if code != 200 and code != 490:

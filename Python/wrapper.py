@@ -94,6 +94,64 @@ class APIException(Exception):
 
 # --- Dataclasses ---
 @dataclass
+class ContentMaps:
+    salmon_fishing_spot: Tuple[int, int] = (-2, -4)
+    goblin_wolfrider: Tuple[int, int] = (9, -3)
+    orc: Tuple[int, int] = (7, -2)
+    ogre: Tuple[int, int] = (8, -2)
+    pig: Tuple[int, int] = (-3, -3)
+    woodcutting_workshop: Tuple[int, int] = (-2, -3)
+    gold_rocks: Tuple[int, int] = (6, -3)
+    cyclops: Tuple[int, int] = (8, -3)
+    blue_slime: Tuple[int, int] = (2, -1)
+    yellow_slime: Tuple[int, int] = (4, -1)
+    red_slime: Tuple[int, int] = (1, -1)
+    green_slime: Tuple[int, int] = (0, -1)
+    goblin: Tuple[int, int] = (9, -2)
+    wolf: Tuple[int, int] = (-2, 1)
+    ash_tree: Tuple[int, int] = (6, 1)
+    copper_rocks: Tuple[int, int] = (2, 0)
+    chicken: Tuple[int, int] = (0, 1)
+    cooking_workshop: Tuple[int, int] = (1, 1)
+    weaponcrafting_workshop: Tuple[int, int] = (2, 1)
+    gearcrafting_workshop: Tuple[int, int] = (3, 1)
+    bank: Tuple[int, int] = (7, 13)
+    grand_exchange: Tuple[int, int] = (5, 1)
+    owlbear: Tuple[int, int] = (10, 2)
+    cow: Tuple[int, int] = (0, 2)
+    taskmaster_monsters: Tuple[int, int] = (1, 2)
+    sunflower: Tuple[int, int] = (2, 2)
+    gudgeon_fishing_spot: Tuple[int, int] = (4, 2)
+    shrimp_fishing_spot: Tuple[int, int] = (5, 2)
+    jewelrycrafting_workshop: Tuple[int, int] = (1, 3)
+    alchemy_workshop: Tuple[int, int] = (2, 3)
+    mushmush: Tuple[int, int] = (6, 4)
+    flying_serpent: Tuple[int, int] = (7, 4)
+    mining_workshop: Tuple[int, int] = (1, 5)
+    birch_tree: Tuple[int, int] = (-1, 6)
+    coal_rocks: Tuple[int, int] = (1, 6)
+    spruce_tree: Tuple[int, int] = (1, 9)
+    skeleton: Tuple[int, int] = (8, 8)
+    dead_tree: Tuple[int, int] = (9, 8)
+    vampire: Tuple[int, int] = (10, 8)
+    iron_rocks: Tuple[int, int] = (1, 7)
+    death_knight: Tuple[int, int] = (10, 7)
+    lich: Tuple[int, int] = (9, 7)
+    bat: Tuple[int, int] = (8, 9)
+    demon: Tuple[int, int] = (-4, 9)
+    glowstem: Tuple[int, int] = (1, 10)
+    imp: Tuple[int, int] = (0, 14)
+    maple_tree: Tuple[int, int] = (4, 14)
+    bass_fishing_spot: Tuple[int, int] = (6, 12)
+    trout_fishing_spot: Tuple[int, int] = (7, 12)
+    mithril_rocks: Tuple[int, int] = (-2, 13)
+    hellhound: Tuple[int, int] = (1, 14)
+    cultist_acolyte: Tuple[int, int] = (-1, 14)
+    taskmaster_items: Tuple[int, int] = (4, 13)
+    nettle: Tuple[int, int] = (7, 14)
+    
+    
+@dataclass
 class Position:
     """Represents a position on a 2D grid."""
     x: int
@@ -207,6 +265,10 @@ class PlayerData:
     artifact1_slot: str
     artifact2_slot: str
     artifact3_slot: str
+    utility1_slot: str
+    utility1_quantity: int
+    utility2_slot: str
+    utility2_quantity: int
     
     # Task information
     task: str
@@ -253,7 +315,10 @@ class PlayerData:
             "amulet": self.amulet_slot,
             "artifact1": self.artifact1_slot,
             "artifact2": self.artifact2_slot,
-            "artifact3": self.artifact3_slot
+            "artifact3": self.artifact3_slot,
+            "utility1": self.utility1_slot,
+            "utility2": self.utility2_slot,
+            "utility3": self.utility3_slot
         }
 
     def get_inventory_space(self) -> int:
@@ -304,6 +369,7 @@ class PlayerData:
         """
         return ret
 # --- End Dataclasses ---
+
 
 class Account:
     def __init__(self, api: "ArtifactsAPI"):
@@ -747,7 +813,7 @@ class Actions:
         self.api.wait_for_cooldown()
         return res
 
-class Maps:
+class Maps_Functions:
     def __init__(self, api: "ArtifactsAPI"):
         """
         Initialize with a reference to the main API to access shared methods.
@@ -777,7 +843,7 @@ class Maps:
             query += f"&content_type={content_type}"
         query += f"&page={page}"
         endpoint = f"maps?{query}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
     def get_(self, x: int, y: int) -> dict:
         """
@@ -791,7 +857,7 @@ class Maps:
             dict: Response data for the specified map.
         """
         endpoint = f"maps/{x}/{y}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Items:
     def __init__(self, api: "ArtifactsAPI"):
@@ -803,7 +869,7 @@ class Items:
         """
         self.api = api
         # --- Item Functions ---
-    def get_items(
+    def get_all(
         self, craft_material: Optional[str] = None, craft_skill: Optional[str] = None, max_level: Optional[int] = None,
         min_level: Optional[int] = None, name: Optional[str] = None, item_type: Optional[str] = None, page: int = 1
     ) -> dict:
@@ -838,9 +904,9 @@ class Items:
         if item_type:
             query += f"&item_type={item_type}"
         endpoint = f"items?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
-    def get_item(self, item_code: str) -> dict:
+    def get(self, item_code: str) -> dict:
         """
         Retrieve details for a specific item.
 
@@ -851,7 +917,7 @@ class Items:
             dict: Response data for the specified item.
         """
         endpoint = f"items/{item_code}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Monsters:
     def __init__(self, api: "ArtifactsAPI"):
@@ -863,7 +929,7 @@ class Monsters:
         """
         self.api = api
     # --- Monster Functions ---
-    def get_monsters(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
+    def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
         """
         Retrieve a list of monsters with optional filters.
 
@@ -886,9 +952,9 @@ class Monsters:
         if page:
             query += f"&page={page}"
         endpoint = f"monsters?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
     
-    def get_monster(self, monster_code: str) -> dict:
+    def get(self, monster_code: str) -> dict:
         """
         Retrieve details for a specific monster.
 
@@ -899,7 +965,7 @@ class Monsters:
             dict: Response data for the specified monster.
         """
         endpoint = f"maps/{monster_code}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Resources:
     def __init__(self, api: "ArtifactsAPI"):
@@ -911,7 +977,7 @@ class Resources:
         """
         self.api = api
     # --- Resource Functions ---
-    def get_resources(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, skill: Optional[str] = None, page: int = 1) -> dict:
+    def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, skill: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of resources with optional filters.
 
@@ -937,9 +1003,9 @@ class Resources:
         if page:
             query += f"&page={page}"
         endpoint = f"resources?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
     
-    def get_resource(self, resource_code: str) -> dict:
+    def get(self, resource_code: str) -> dict:
         """
         Retrieve details for a specific resource.
 
@@ -950,7 +1016,7 @@ class Resources:
             dict: Response data for the specified resource.
         """
         endpoint = f"resources/{resource_code}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Events:
     def __init__(self, api: "ArtifactsAPI"):
@@ -962,7 +1028,7 @@ class Events:
         """
         self.api = api
     # --- Event Functions ---
-    def get_active_events(self, page: int = 1) -> dict:
+    def get_active(self, page: int = 1) -> dict:
         """
         Retrieve a list of active events.
 
@@ -974,9 +1040,9 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events/active?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
-    def get_events(self, page: int = 1) -> dict:
+    def get_all(self, page: int = 1) -> dict:
         """
         Retrieve a list of all events.
 
@@ -988,7 +1054,7 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class GE:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1000,7 +1066,7 @@ class GE:
         """
         self.api = api
     # --- Grand Exchange Functions ---
-    def ge_get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the transaction history for a specific item on the Grand Exchange.
 
@@ -1019,9 +1085,9 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/history/{item_code}?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
-    def ge_get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of sell orders on the Grand Exchange with optional filters.
 
@@ -1039,9 +1105,9 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/orders?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
-    def ge_get_sell_order(self, order_id: str) -> dict:
+    def get_sell_order(self, order_id: str) -> dict:
         """
         Retrieve details for a specific sell order on the Grand Exchange.
 
@@ -1052,7 +1118,7 @@ class GE:
             dict: Response data for the specified sell order.
         """
         endpoint = f"grandexchange/orders/{order_id}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Tasks:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1064,7 +1130,7 @@ class Tasks:
         """
         self.api = api
     # --- Task Functions ---
-    def get_tasks(self, skill: Optional[str] = None, task_type: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
+    def get_all(self, skill: Optional[str] = None, task_type: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
         """
         Retrieve a list of tasks with optional filters.
 
@@ -1090,9 +1156,9 @@ class Tasks:
         if page:
             query += f"&page={page}"
         endpoint = f"tasks/list?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
-    def get_task(self, task_code: str) -> dict:
+    def get(self, task_code: str) -> dict:
         """
         Retrieve details for a specific task.
 
@@ -1103,9 +1169,9 @@ class Tasks:
             dict: Response data for the specified task.
         """
         endpoint = f"tasks/list/{task_code}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
-    def get_task_rewards(self, page: int = 1) -> dict:
+    def get_all_rewards(self, page: int = 1) -> dict:
         """
         Retrieve a list of task rewards.
 
@@ -1117,9 +1183,9 @@ class Tasks:
         """
         query = f"size=100&page={page}"    
         endpoint = f"tasks/rewards?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
-    def get_task_reward(self, task_code: str) -> dict:
+    def get_reward(self, task_code: str) -> dict:
         """
         Retrieve details for a specific task reward.
 
@@ -1130,7 +1196,7 @@ class Tasks:
             dict: Response data for the specified task reward.
         """
         endpoint = f"tasks/rewards/{task_code}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Achievements:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1142,7 +1208,7 @@ class Achievements:
         """
         self.api = api
     # --- Achievement Functions ---
-    def get_achievements(self, achievement_type: Optional[str] = None, page: int = 1) -> dict:
+    def get_all(self, achievement_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of achievements with optional filters.
 
@@ -1158,9 +1224,9 @@ class Achievements:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"achievements?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
     
-    def get_achievement(self, achievement_code: str) -> dict:
+    def get(self, achievement_code: str) -> dict:
         """
         Retrieve details for a specific achievement.
 
@@ -1171,7 +1237,7 @@ class Achievements:
             dict: Response data for the specified achievement.
         """
         endpoint = f"achievements/{achievement_code}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Leaderboard:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1199,7 +1265,7 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/characters?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
     def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
         """
@@ -1217,7 +1283,7 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/accounts?{query}"
-        return self._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
 class Accounts:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1249,8 +1315,7 @@ class Accounts:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"/accounts/{account}/achievements?{query}"
-        return self._make_request("GET", endpoint) 
-
+        return self.api._make_request("GET", endpoint) 
 
 
 
@@ -1286,7 +1351,7 @@ class ArtifactsAPI:
         self.account = Account(self)
         self.character = Character(self)
         self.actions = Actions(self)
-        self.maps = Maps(self)
+        self.maps = Maps_Functions(self)
         self.items = Items(self)
         self.monsters = Monsters(self)
         self.resources = Resources(self)
@@ -1296,6 +1361,7 @@ class ArtifactsAPI:
         self.achiecements = Achievements(self)
         self.leaderboard = Leaderboard(self)
         self.accounts = Accounts(self)
+        self.content_maps = ContentMaps()
 
     def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None) -> dict:
         """
@@ -1510,6 +1576,10 @@ class ArtifactsAPI:
             artifact1_slot=data["artifact1_slot"],
             artifact2_slot=data["artifact2_slot"],
             artifact3_slot=data["artifact3_slot"],
+            utility1_slot=data["utility1_slot"],
+            utility2_slot=data["utility2_slot"],
+            utility1_quantity=data["utility1_slot_quantity"],
+            utility2_quantity=data["utility2_slot_quantity"],
             task=data["task"],
             task_type=data["task_type"],
             task_progress=data["task_progress"],

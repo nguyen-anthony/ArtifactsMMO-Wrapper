@@ -472,7 +472,8 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/move"
         json = {"x": x, "y": y}
         res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        if res.status_code == 200:
+            self.api.wait_for_cooldown()
         return res
 
     def rest(self) -> dict:

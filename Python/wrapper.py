@@ -172,6 +172,11 @@ class Position:
         """
         return abs(self.x - other.x) + abs(self.y - other.y)
 
+    def __iter__(self):
+        yield self.x
+        yield self.y
+
+
 
 @dataclass
 class InventoryItem:
@@ -1472,7 +1477,7 @@ class ArtifactsAPI:
             case 491:
                 raise APIException.EquipmentSlot(m)
             case 490:
-                self._print(message)
+                self._print(m)
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
         if code != 200 and code != 490:
@@ -1487,7 +1492,7 @@ class ArtifactsAPI:
         This function prints the cooldown time remaining and pauses
         execution until it has expired.
         """
-        cooldown_time = self.character.cooldown
+        cooldown_time = self.char.cooldown
         if cooldown_time > 0:
             self._print(f"Waiting for cooldown... ({cooldown_time} seconds)")
             time.sleep(cooldown_time)
@@ -1590,3 +1595,4 @@ class ArtifactsAPI:
             inventory=player_inventory
         )
         return self.char
+    

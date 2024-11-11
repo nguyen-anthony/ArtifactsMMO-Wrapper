@@ -1,7 +1,13 @@
-import requests
-import time
+#  __      _____ ___             _      __      _ _         __              _   _               _ 
+#  \ \    / /_ _| _ \   _ _  ___| |_   / _|_  _| | |_  _   / _|_  _ _ _  __| |_(_)___ _ _  __ _| |
+#   \ \/\/ / | ||  _/  | ' \/ _ \  _| |  _| || | | | || | |  _| || | ' \/ _|  _| / _ \ ' \/ _` | |
+#    \_/\_/ |___|_|( ) |_||_\___/\__| |_|  \_,_|_|_|\_, | |_|  \_,_|_||_\__|\__|_\___/_||_\__,_|_|
+#                  |/                               |__/                                          
+
+import aiohttp
+import asyncio
 from dataclasses import dataclass
-from typing import List, Dict, Optional, Tuple, Union
+from typing import Tuple, List, Dict, Optional, Union
 from datetime import datetime
 
 debug=False
@@ -156,11 +162,11 @@ class Position:
     x: int
     y: int
 
-    def __repr__(self) -> str:
+    async def __repr__(self) -> str:
         """String representation of the position in (x, y) format."""
         return f"({self.x}, {self.y})"
 
-    def dist(self, other: 'Position') -> int:
+    async def dist(self, other: 'Position') -> int:
         """
         Calculate the Manhattan distance to another position.
         
@@ -172,7 +178,7 @@ class Position:
         """
         return abs(self.x - other.x) + abs(self.y - other.y)
 
-    def __iter__(self):
+    async def __iter__(self):
         yield self.x
         yield self.y
 
@@ -185,9 +191,14 @@ class InventoryItem:
     code: str
     quantity: int
 
-    def __repr__(self) -> str:
+    async def __repr__(self) -> str:
         """String representation of the inventory item."""
         return f"({self.slot}) {self.quantity}x {self.code}"
+    
+    async def __iter__(self):
+        yield self.slot
+        yield self.code 
+        yield self.quantity
 
 
 @dataclass
@@ -284,7 +295,7 @@ class PlayerData:
     inventory_max_items: int
     inventory: List[InventoryItem]
 
-    def get_skill_progress(self, skill: str) -> Tuple[int, float]:
+    async def get_skill_progress(self, skill: str) -> Tuple[int, float]:
         """
         Get level and progress percentage for a given skill.
         
@@ -300,7 +311,7 @@ class PlayerData:
         progress = (xp / max_xp) * 100 if max_xp > 0 else 0
         return level, progress
 
-    def get_equipment_slots(self) -> Dict[str, str]:
+    async def get_equipment_slots(self) -> Dict[str, str]:
         """
         Get all equipped items in each slot as a dictionary.
         
@@ -325,7 +336,7 @@ class PlayerData:
             "utility3": self.utility3_slot
         }
 
-    def get_inventory_space(self) -> int:
+    async def get_inventory_space(self) -> int:
         """
         Calculate remaining inventory space.
         
@@ -337,7 +348,7 @@ class PlayerData:
             items += item.quantity
         return self.inventory_max_items - items
 
-    def has_item(self, item_code: str) -> Tuple[bool, int]:
+    async def has_item(self, item_code: str) -> Tuple[bool, int]:
         """
         Check if the player has a specific item and its quantity.
         
@@ -352,7 +363,7 @@ class PlayerData:
                 return True, item.quantity
         return False, 0
 
-    def get_task_progress_percentage(self) -> float:
+    async def get_task_progress_percentage(self) -> float:
         """
         Get the current task progress as a percentage.
         
@@ -361,7 +372,7 @@ class PlayerData:
         """
         return (self.task_progress / self.task_total) * 100 if self.task_total > 0 else 0
     
-    def __repr__(self) -> str:
+    async def __repr__(self) -> str:
         """String representation of player's core stats and skills."""
         ret = \
         f"""{self.name}
@@ -389,30 +400,30 @@ class Account:
         self.api = api
 
     # --- Account Functions ---
-    def get_bank_details(self) -> dict:
+    async def get_bank_details(self) -> dict:
         """Retrieve the details of the player's bank account."""
         endpoint = "my/bank"
-        return self.api._make_request("GET", endpoint)
+        return await self.api._make_request("GET", endpoint)
 
-    def get_bank_items(self) -> dict:
+    async def get_bank_items(self) -> dict:
         """Retrieve the list of items stored in the player's bank."""
         endpoint = "my/bank/items"
-        return self.api._make_request("GET", endpoint)
+        return await self.api._make_request("GET", endpoint)
 
-    def get_ge_sell_orders(self) -> dict:
+    async def get_ge_sell_orders(self) -> dict:
         """Retrieve the player's current sell orders on the Grand Exchange."""
         endpoint = "my/grandexchange/orders"
-        return self.api._make_request("GET", endpoint)
+        return await self.api._make_request("GET", endpoint)
 
-    def get_ge_sell_history(self) -> dict:
+    async def get_ge_sell_history(self) -> dict:
         """Retrieve the player's Grand Exchange sell history."""
         endpoint = "my/grandexchange/history"
-        return self.api._make_request("GET", endpoint)
+        return await self.api._make_request("GET", endpoint)
 
-    def get_account_details(self) -> dict:
+    async def get_account_details(self) -> dict:
         """Retrieve details of the player's account."""
         endpoint = "my/details"
-        return self.api._make_request("GET", endpoint)
+        return await self.api._make_request("GET", endpoint)
 
 class Character:
     def __init__(self, api: "ArtifactsAPI"):
@@ -425,7 +436,7 @@ class Character:
         self.api = api
 
     # --- Character Functions ---
-    def create_character(self, name: str, skin: str = "men1") -> dict:
+    async def create_character(self, name: str, skin: str = "men1") -> dict:
         """
         Create a new character with the given name and skin.
 
@@ -438,9 +449,9 @@ class Character:
         """
         endpoint = "characters/create"
         json = {"name": name, "skin": skin}
-        return self.api._make_request("POST", endpoint, json=json)
+        return await self.api._make_request("POST", endpoint, json=json)
 
-    def delete_character(self, name: str) -> dict:
+    async def delete_character(self, name: str) -> dict:
         """
         Delete a character by name.
 
@@ -452,7 +463,7 @@ class Character:
         """
         endpoint = "characters/delete"
         json = {"name": name}
-        return self.api._make_request("POST", endpoint, json=json)
+        return await self.api._make_request("POST", endpoint, json=json)
 
 class Actions:
     def __init__(self, api: "ArtifactsAPI"):
@@ -465,7 +476,7 @@ class Actions:
         self.api = api
 
     # --- Character Actions ---
-    def move(self, x: int, y: int) -> dict:
+    async def move(self, x: int, y: int) -> dict:
         """
         Move the character to a new position.
 
@@ -478,11 +489,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/move"
         json = {"x": x, "y": y}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def rest(self) -> dict:
+    async def rest(self) -> dict:
         """
         Perform a rest action to regain energy.
 
@@ -490,12 +501,12 @@ class Actions:
             dict: Response data confirming rest action.
         """
         endpoint = f"my/{self.api.char.name}/action/rest"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
     # --- Item Action Functions ---
-    def equip_item(self, item_code: str, slot: str, quantity: int = 1) -> dict:
+    async def equip_item(self, item_code: str, slot: str, quantity: int = 1) -> dict:
         """
         Equip an item to a specified slot.
 
@@ -509,11 +520,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/equip"
         json = {"code": item_code, "slot": slot, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def unequip_item(self, slot: str, quantity: int = 1) -> dict:
+    async def unequip_item(self, slot: str, quantity: int = 1) -> dict:
         """
         Unequip an item from a specified slot.
 
@@ -526,11 +537,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/unequip"
         json = {"slot": slot, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def use_item(self, item_code: str, quantity: int = 1) -> dict:
+    async def use_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Use an item from the player's inventory.
 
@@ -543,11 +554,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/use"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def delete_item(self, item_code: str, quantity: int = 1) -> dict:
+    async def delete_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Delete an item from the player's inventory.
 
@@ -560,12 +571,12 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/delete-item"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
     # --- Resource Action Functions ---
-    def fight(self) -> dict:
+    async def fight(self) -> dict:
         """
         Initiate a fight with a monster.
 
@@ -573,11 +584,11 @@ class Actions:
             dict: Response data with fight details.
         """
         endpoint = f"my/{self.api.char.name}/action/fight"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
-    def gather(self) -> dict:
+    async def gather(self) -> dict:
         """
         Gather resources, such as mining, woodcutting, or fishing.
 
@@ -585,11 +596,11 @@ class Actions:
             dict: Response data with gathered resources.
         """
         endpoint = f"my/{self.api.char.name}/action/gathering"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
-    def craft_item(self, item_code: str, quantity: int = 1) -> dict:
+    async def craft_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Craft an item.
 
@@ -600,13 +611,13 @@ class Actions:
         Returns:
             dict: Response data with crafted item details.
         """
-        endpoint = f"my/{self.api.char.name}/action/craft"
+        endpoint = f"my/{self.api.char.name}/action/crafting"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def recycle_item(self, item_code: str, quantity: int = 1) -> dict:
+    async def recycle_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Recycle an item.
 
@@ -619,12 +630,12 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/recycle"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
     # --- Bank Action Functions ---
-    def bank_deposit_item(self, item_code: str, quantity: int = 1) -> dict:
+    async def bank_deposit_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Deposit an item into the bank.
 
@@ -637,11 +648,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/deposit"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def bank_deposit_gold(self, amount: int) -> dict:
+    async def bank_deposit_gold(self, amount: int) -> dict:
         """
         Deposit gold into the bank.
 
@@ -653,11 +664,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/gold"
         json = {"amount": amount}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def bank_withdraw_item(self, item_code: str, quantity: int = 1) -> dict:
+    async def bank_withdraw_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Withdraw an item from the bank.
 
@@ -670,11 +681,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def bank_withdraw_gold(self, amount: int) -> dict:
+    async def bank_withdraw_gold(self, amount: int) -> dict:
         """
         Withdraw gold from the bank.
 
@@ -686,11 +697,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/gold"
         json = {"amount": amount}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def bank_buy_expansion(self) -> dict:
+    async def bank_buy_expansion(self) -> dict:
         """
         Purchase an expansion for the bank.
 
@@ -698,12 +709,12 @@ class Actions:
             dict: Response data confirming the expansion purchase.
         """
         endpoint = f"my/{self.api.char.name}/action/bank/buy_expansion"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
     # --- Grand Exchange Actions Functions ---
-    def ge_buy_item(self, order_id: str, quantity: int = 1) -> dict:
+    async def ge_buy_item(self, order_id: str, quantity: int = 1) -> dict:
         """
         Buy an item from the Grand Exchange.
 
@@ -716,11 +727,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
         json = {"id": order_id, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def ge_create_sell_order(self, item_code: str, price: int, quantity: int = 1) -> dict:
+    async def ge_create_sell_order(self, item_code: str, price: int, quantity: int = 1) -> dict:
         """
         Create a sell order on the Grand Exchange.
 
@@ -734,11 +745,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
         json = {"code": item_code, "item_code": price, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def ge_cancel_sell_order(self, order_id: str) -> dict:
+    async def ge_cancel_sell_order(self, order_id: str) -> dict:
         """
         Cancel an active sell order on the Grand Exchange.
 
@@ -750,12 +761,12 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
         json = {"id": order_id}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
     # --- Taskmaster Action Functions ---
-    def taskmaster_accept_task(self) -> dict:
+    async def taskmaster_accept_task(self) -> dict:
         """
         Accept a new task from the taskmaster.
 
@@ -763,11 +774,11 @@ class Actions:
             dict: Response data confirming task acceptance.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/new"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
-    def taskmaster_complete_task(self) -> dict:
+    async def taskmaster_complete_task(self) -> dict:
         """
         Complete the current task with the taskmaster.
 
@@ -775,11 +786,11 @@ class Actions:
             dict: Response data confirming task completion.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/complete"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
-    def taskmaster_exchange_task(self) -> dict:
+    async def taskmaster_exchange_task(self) -> dict:
         """
         Exchange the current task with the taskmaster.
 
@@ -787,11 +798,11 @@ class Actions:
             dict: Response data confirming task exchange.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/exchange"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
-    def taskmaster_trade_task(self, item_code: str, quantity: int = 1) -> dict:
+    async def taskmaster_trade_task(self, item_code: str, quantity: int = 1) -> dict:
         """
         Trade a task item with another character.
 
@@ -804,11 +815,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/trade"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint, json=json)
+        await self.api.wait_for_cooldown()
         return res
 
-    def taskmaster_cancel_task(self) -> dict:
+    async def taskmaster_cancel_task(self) -> dict:
         """
         Cancel the current task with the taskmaster.
 
@@ -816,8 +827,8 @@ class Actions:
             dict: Response data confirming task cancellation.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/cancel"
-        res = self.api._make_request("POST", endpoint)
-        self.api.wait_for_cooldown()
+        res = await self.api._make_request("POST", endpoint)
+        await self.api.wait_for_cooldown()
         return res
 
 class Maps_Functions:
@@ -831,7 +842,7 @@ class Maps_Functions:
         self.api = api
 
         # --- Map Functions ---
-    def get_all(self, map_content: Optional[str] = None, content_type: Optional[str] = None, page: int = 1) -> dict:
+    async def get_all(self, map_content: Optional[str] = None, content_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of maps with optional filters.
 
@@ -850,9 +861,9 @@ class Maps_Functions:
             query += f"&content_type={content_type}"
         query += f"&page={page}"
         endpoint = f"maps?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get_(self, x: int, y: int) -> dict:
+    async def get_(self, x: int, y: int) -> dict:
         """
         Retrieve map data for a specific coordinate.
 
@@ -864,7 +875,7 @@ class Maps_Functions:
             dict: Response data for the specified map.
         """
         endpoint = f"maps/{x}/{y}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class Items:
     def __init__(self, api: "ArtifactsAPI"):
@@ -876,7 +887,7 @@ class Items:
         """
         self.api = api
         # --- Item Functions ---
-    def get_all(
+    async def get_all(
         self, craft_material: Optional[str] = None, craft_skill: Optional[str] = None, max_level: Optional[int] = None,
         min_level: Optional[int] = None, name: Optional[str] = None, item_type: Optional[str] = None, page: int = 1
     ) -> dict:
@@ -911,9 +922,9 @@ class Items:
         if item_type:
             query += f"&item_type={item_type}"
         endpoint = f"items?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get(self, item_code: str) -> dict:
+    async def get(self, item_code: str) -> dict:
         """
         Retrieve details for a specific item.
 
@@ -924,7 +935,7 @@ class Items:
             dict: Response data for the specified item.
         """
         endpoint = f"items/{item_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class Monsters:
     def __init__(self, api: "ArtifactsAPI"):
@@ -936,7 +947,7 @@ class Monsters:
         """
         self.api = api
     # --- Monster Functions ---
-    def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
+    async def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
         """
         Retrieve a list of monsters with optional filters.
 
@@ -959,9 +970,9 @@ class Monsters:
         if page:
             query += f"&page={page}"
         endpoint = f"monsters?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
     
-    def get(self, monster_code: str) -> dict:
+    async def get(self, monster_code: str) -> dict:
         """
         Retrieve details for a specific monster.
 
@@ -972,7 +983,7 @@ class Monsters:
             dict: Response data for the specified monster.
         """
         endpoint = f"maps/{monster_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class Resources:
     def __init__(self, api: "ArtifactsAPI"):
@@ -984,7 +995,7 @@ class Resources:
         """
         self.api = api
     # --- Resource Functions ---
-    def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, skill: Optional[str] = None, page: int = 1) -> dict:
+    async def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, skill: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of resources with optional filters.
 
@@ -1010,9 +1021,9 @@ class Resources:
         if page:
             query += f"&page={page}"
         endpoint = f"resources?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
     
-    def get(self, resource_code: str) -> dict:
+    async def get(self, resource_code: str) -> dict:
         """
         Retrieve details for a specific resource.
 
@@ -1023,7 +1034,7 @@ class Resources:
             dict: Response data for the specified resource.
         """
         endpoint = f"resources/{resource_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class Events:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1035,7 +1046,7 @@ class Events:
         """
         self.api = api
     # --- Event Functions ---
-    def get_active(self, page: int = 1) -> dict:
+    async def get_active(self, page: int = 1) -> dict:
         """
         Retrieve a list of active events.
 
@@ -1047,9 +1058,9 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events/active?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get_all(self, page: int = 1) -> dict:
+    async def get_all(self, page: int = 1) -> dict:
         """
         Retrieve a list of all events.
 
@@ -1061,7 +1072,7 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class GE:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1073,7 +1084,7 @@ class GE:
         """
         self.api = api
     # --- Grand Exchange Functions ---
-    def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    async def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the transaction history for a specific item on the Grand Exchange.
 
@@ -1092,9 +1103,9 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/history/{item_code}?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    async def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of sell orders on the Grand Exchange with optional filters.
 
@@ -1112,9 +1123,9 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/orders?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get_sell_order(self, order_id: str) -> dict:
+    async def get_sell_order(self, order_id: str) -> dict:
         """
         Retrieve details for a specific sell order on the Grand Exchange.
 
@@ -1125,7 +1136,7 @@ class GE:
             dict: Response data for the specified sell order.
         """
         endpoint = f"grandexchange/orders/{order_id}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class Tasks:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1137,7 +1148,7 @@ class Tasks:
         """
         self.api = api
     # --- Task Functions ---
-    def get_all(self, skill: Optional[str] = None, task_type: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
+    async def get_all(self, skill: Optional[str] = None, task_type: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
         """
         Retrieve a list of tasks with optional filters.
 
@@ -1163,9 +1174,9 @@ class Tasks:
         if page:
             query += f"&page={page}"
         endpoint = f"tasks/list?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get(self, task_code: str) -> dict:
+    async def get(self, task_code: str) -> dict:
         """
         Retrieve details for a specific task.
 
@@ -1176,9 +1187,9 @@ class Tasks:
             dict: Response data for the specified task.
         """
         endpoint = f"tasks/list/{task_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get_all_rewards(self, page: int = 1) -> dict:
+    async def get_all_rewards(self, page: int = 1) -> dict:
         """
         Retrieve a list of task rewards.
 
@@ -1190,9 +1201,9 @@ class Tasks:
         """
         query = f"size=100&page={page}"    
         endpoint = f"tasks/rewards?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
-    def get_reward(self, task_code: str) -> dict:
+    async def get_reward(self, task_code: str) -> dict:
         """
         Retrieve details for a specific task reward.
 
@@ -1203,7 +1214,7 @@ class Tasks:
             dict: Response data for the specified task reward.
         """
         endpoint = f"tasks/rewards/{task_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class Achievements:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1215,7 +1226,7 @@ class Achievements:
         """
         self.api = api
     # --- Achievement Functions ---
-    def get_all(self, achievement_type: Optional[str] = None, page: int = 1) -> dict:
+    async def get_all(self, achievement_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of achievements with optional filters.
 
@@ -1231,9 +1242,9 @@ class Achievements:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"achievements?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
     
-    def get(self, achievement_code: str) -> dict:
+    async def get(self, achievement_code: str) -> dict:
         """
         Retrieve details for a specific achievement.
 
@@ -1244,7 +1255,7 @@ class Achievements:
             dict: Response data for the specified achievement.
         """
         endpoint = f"achievements/{achievement_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return await self.api._make_request("GET", endpoint).get("data")
 
 class Leaderboard:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1256,7 +1267,7 @@ class Leaderboard:
         """
         self.api = api
     # --- Leaderboard Functions ---
-    def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+    async def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the characters leaderboard with optional sorting.
 
@@ -1272,9 +1283,9 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/characters?{query}"
-        return self.api._make_request("GET", endpoint)
+        return await self.api._make_request("GET", endpoint)
 
-    def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+    async def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the accounts leaderboard with optional sorting.
 
@@ -1290,7 +1301,7 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/accounts?{query}"
-        return self.api._make_request("GET", endpoint)
+        return await self.api._make_request("GET", endpoint)
 
 class Accounts:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1301,8 +1312,9 @@ class Accounts:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
+        
     # --- Accounts Functions ---
-    def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:
+    async def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of achievements for a specific account with optional filters.
 
@@ -1322,7 +1334,7 @@ class Accounts:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"/accounts/{account}/achievements?{query}"
-        return self.api._make_request("GET", endpoint) 
+        return await self.api._make_request("GET", endpoint) 
 
 
 
@@ -1352,8 +1364,9 @@ class ArtifactsAPI:
             "Accept": "application/json",
             "Authorization": f'Bearer {self.token}'
         }
-        self.char: PlayerData = self.get_character(character_name=character_name)
-
+        self.char: None # Placeholder value
+        self.character_name = character_name
+        
         # --- Subclass definition ---
         self.account = Account(self)
         self.character = Character(self)
@@ -1370,7 +1383,11 @@ class ArtifactsAPI:
         self.accounts = Accounts(self)
         self.content_maps = ContentMaps()
 
-    def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None) -> dict:
+        
+    async def initialize(self):
+        self.char = await self.get_character(character_name=self.character_name)
+        
+    async def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None) -> dict:
         """
         Makes an API request and returns the JSON response.
 
@@ -1386,26 +1403,20 @@ class ArtifactsAPI:
         Raises:
             APIException: For various HTTP status codes with relevant error messages.
         """
-        try:
-            endpoint = endpoint.strip("/")
-            if debug and source != "get_character":
-                self._print(endpoint)
-            url = f"{self.base_url}/{endpoint}"
-            response = requests.request(method, url, headers=self.headers, json=json)
-        except Exception as e:
-            self._print(e)
-            self._make_request(method, endpoint, json, source)
-
-        if response.status_code != 200:
-            message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')}"
-            self._raise(response.status_code, message)
+        async with aiohttp.ClientSession(headers=self.headers) as session:
+            url = f"{self.base_url}/{endpoint.strip('/')}"
+            async with session.request(method, url, json=json) as response:
+                if response.status != 200:
+                    error_message = await response.text()
+                    await self._raise(response.status, error_message)
+                return await response.json()
 
         if source != "get_character":
-            self.get_character()
+            await self.get_character()
             
         return response.json()
 
-    def _print(self, message: Union[str, Exception]) -> None:
+    async def _print(self, message: Union[str, Exception]) -> None:
         """
         Prints a message with a timestamp and character name.
 
@@ -1415,7 +1426,7 @@ class ArtifactsAPI:
         m = f"[{self.char.name}] {datetime.now().strftime('%H:%M:%S')} - {message}"
         print(m)
 
-    def _raise(self, code: int, message: str) -> None:
+    async def _raise(self, code: int, message: str) -> None:
         """
         Raises an API exception based on the response code and error message.
 
@@ -1477,27 +1488,27 @@ class ArtifactsAPI:
             case 491:
                 raise APIException.EquipmentSlot(m)
             case 490:
-                self._print(m)
+                await self._print(m)
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
+            
         if code != 200 and code != 490:
             raise Exception(m)
 
 
     # --- Helper Functions ---
-    def wait_for_cooldown(self) -> None:
+    async def wait_for_cooldown(self) -> None:
         """
         Wait for the character's cooldown time to expire, if applicable.
         
         This function prints the cooldown time remaining and pauses
         execution until it has expired.
         """
-        cooldown_time = self.char.cooldown
-        if cooldown_time > 0:
-            self._print(f"Waiting for cooldown... ({cooldown_time} seconds)")
-            time.sleep(cooldown_time)
+        if self.char and self.char.cooldown > 0:
+            await self._print(f"Waiting for cooldown... ({self.char.cooldown} seconds)")
+            await asyncio.sleep(self.char.cooldown)
 
-    def get_character(self, data: Optional[dict] = None, character_name: Optional[str] = None) -> PlayerData:
+    async def get_character(self, data: Optional[dict] = None, character_name: Optional[str] = None) -> PlayerData:
         """
         Retrieve or update the character's data and initialize the character attribute.
 
@@ -1513,7 +1524,8 @@ class ArtifactsAPI:
                 endpoint = f"characters/{character_name}"
             else:
                 endpoint = f"characters/{self.char.name}"
-            data = self._make_request("GET", endpoint, source="get_character").get('data')
+            res = await self._make_request("GET", endpoint, source="get_character")
+            data = res.get('data')
 
         inventory_data = data.get("inventory", [])
         player_inventory: List[InventoryItem] = [

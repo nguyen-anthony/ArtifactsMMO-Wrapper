@@ -1,13 +1,7 @@
-#  __      _____ ___             _      __      _ _         __              _   _               _ 
-#  \ \    / /_ _| _ \   _ _  ___| |_   / _|_  _| | |_  _   / _|_  _ _ _  __| |_(_)___ _ _  __ _| |
-#   \ \/\/ / | ||  _/  | ' \/ _ \  _| |  _| || | | | || | |  _| || | ' \/ _|  _| / _ \ ' \/ _` | |
-#    \_/\_/ |___|_|( ) |_||_\___/\__| |_|  \_,_|_|_|\_, | |_|  \_,_|_||_\__|\__|_\___/_||_\__,_|_|
-#                  |/                               |__/                                          
-
-import aiohttp
-import asyncio
-from dataclasses import dataclass
-from typing import Tuple, List, Dict, Optional, Union
+import requests
+import time
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Tuple, Union
 from datetime import datetime
 
 debug=False
@@ -100,73 +94,100 @@ class APIException(Exception):
 
 # --- Dataclasses ---
 @dataclass
-class ContentMaps:
-    salmon_fishing_spot: Tuple[int, int] = (-2, -4)
-    goblin_wolfrider: Tuple[int, int] = (9, -3)
-    orc: Tuple[int, int] = (7, -2)
-    ogre: Tuple[int, int] = (8, -2)
-    pig: Tuple[int, int] = (-3, -3)
-    woodcutting_workshop: Tuple[int, int] = (-2, -3)
-    gold_rocks: Tuple[int, int] = (6, -3)
-    cyclops: Tuple[int, int] = (8, -3)
-    blue_slime: Tuple[int, int] = (2, -1)
-    yellow_slime: Tuple[int, int] = (4, -1)
-    red_slime: Tuple[int, int] = (1, -1)
-    green_slime: Tuple[int, int] = (0, -1)
-    goblin: Tuple[int, int] = (9, -2)
-    wolf: Tuple[int, int] = (-2, 1)
-    ash_tree: Tuple[int, int] = (6, 1)
-    copper_rocks: Tuple[int, int] = (2, 0)
-    chicken: Tuple[int, int] = (0, 1)
-    cooking_workshop: Tuple[int, int] = (1, 1)
-    weaponcrafting_workshop: Tuple[int, int] = (2, 1)
-    gearcrafting_workshop: Tuple[int, int] = (3, 1)
-    bank: Tuple[int, int] = (4, 1)
-    grand_exchange: Tuple[int, int] = (5, 1)
-    owlbear: Tuple[int, int] = (10, 2)
-    cow: Tuple[int, int] = (0, 2)
-    taskmaster_monsters: Tuple[int, int] = (1, 2)
-    sunflower: Tuple[int, int] = (2, 2)
-    gudgeon_fishing_spot: Tuple[int, int] = (4, 2)
-    shrimp_fishing_spot: Tuple[int, int] = (5, 2)
-    jewelrycrafting_workshop: Tuple[int, int] = (1, 3)
-    alchemy_workshop: Tuple[int, int] = (2, 3)
-    mushmush: Tuple[int, int] = (6, 4)
-    flying_serpent: Tuple[int, int] = (7, 4)
-    mining_workshop: Tuple[int, int] = (1, 5)
-    birch_tree: Tuple[int, int] = (-1, 6)
-    coal_rocks: Tuple[int, int] = (1, 6)
-    spruce_tree: Tuple[int, int] = (1, 9)
-    skeleton: Tuple[int, int] = (8, 8)
-    dead_tree: Tuple[int, int] = (9, 8)
-    vampire: Tuple[int, int] = (10, 8)
-    iron_rocks: Tuple[int, int] = (1, 7)
-    death_knight: Tuple[int, int] = (10, 7)
-    lich: Tuple[int, int] = (9, 7)
-    bat: Tuple[int, int] = (8, 9)
-    demon: Tuple[int, int] = (-4, 9)
-    glowstem: Tuple[int, int] = (1, 10)
-    imp: Tuple[int, int] = (0, 14)
-    maple_tree: Tuple[int, int] = (4, 14)
-    bass_fishing_spot: Tuple[int, int] = (6, 12)
-    trout_fishing_spot: Tuple[int, int] = (7, 12)
-    mithril_rocks: Tuple[int, int] = (-2, 13)
-    hellhound: Tuple[int, int] = (1, 14)
-    cultist_acolyte: Tuple[int, int] = (-1, 14)
-    taskmaster_items: Tuple[int, int] = (4, 13)
-    nettle: Tuple[int, int] = (7, 14)
+class Drop:
+    code: str
+    rate: int
+    min_quantity: int
+    max_quantity: int
+
+@dataclass
+class ContentMap:
+    name: str
+    code: str
+    level: int
+    skill: str
+    x: int
+    y: int
+    drops: List[Drop]
+
+    def __iter__(self):
+        yield self.x
+        yield self.y
+
+    def __repr__(self) -> str:
+        return f"{self.name} ({self.code}) at ({self.x}, {self.y})\n  Requires {self.skill} level {self.level}"
     
+
+@dataclass
+class ContentMaps:
+    salmon_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Salmon Fishing Spot", code="salmon_fishing_spot", level=40, skill="fishing", x=-2, y=-4, drops=['Drop(code="salmon", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)']))
+    bandit_lizard: ContentMap = field(default_factory=lambda: ContentMap(name="Bandit Lizard", code="bandit_lizard", level=25, skill="combat", x=-1, y=-4, drops=['Drop(code="bandit_armor", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="lizard_skin", rate=12, min_quantity=1, max_quantity=1)']))
+    goblin_wolfrider: ContentMap = field(default_factory=lambda: ContentMap(name="Goblin Wolfrider", code="goblin_wolfrider", level=40, skill="combat", x=6, y=-4, drops=['Drop(code="broken_sword", rate=24, min_quantity=1, max_quantity=1)', 'Drop(code="wolfrider_hair", rate=12, min_quantity=1, max_quantity=1)']))
+    orc: ContentMap = field(default_factory=lambda: ContentMap(name="Orc", code="orc", level=38, skill="combat", x=7, y=-2, drops=['Drop(code="orc_skin", rate=12, min_quantity=1, max_quantity=1)']))
+    ogre: ContentMap = field(default_factory=lambda: ContentMap(name="Ogre", code="ogre", level=20, skill="combat", x=8, y=-2, drops=['Drop(code="ogre_eye", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="ogre_skin", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="wooden_club", rate=100, min_quantity=1, max_quantity=1)']))
+    pig: ContentMap = field(default_factory=lambda: ContentMap(name="Pig", code="pig", level=19, skill="combat", x=-3, y=-3, drops=['Drop(code="pig_skin", rate=12, min_quantity=1, max_quantity=1)']))
+    woodcutting: ContentMap = field(default_factory=lambda: ContentMap(name="Pig", code="woodcutting", level=19, skill="combat", x=-2, y=-3, drops=['Drop(code="pig_skin", rate=12, min_quantity=1, max_quantity=1)']))
+    gold_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Gold Rocks", code="gold_rocks", level=30, skill="mining", x=6, y=-3, drops=['Drop(code="gold_ore", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="topaz_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="topaz", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="ruby", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="ruby_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire_stone", rate=600, min_quantity=1, max_quantity=1)']))
+    cyclops: ContentMap = field(default_factory=lambda: ContentMap(name="Cyclops", code="cyclops", level=25, skill="combat", x=7, y=-3, drops=['Drop(code="cyclops_eye", rate=12, min_quantity=1, max_quantity=1)']))
+    blue_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Blue Slime", code="blue_slime", level=6, skill="combat", x=0, y=-2, drops=['Drop(code="blue_slimeball", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)']))
+    yellow_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Yellow Slime", code="yellow_slime", level=2, skill="combat", x=1, y=-2, drops=['Drop(code="yellow_slimeball", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)']))
+    red_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Red Slime", code="red_slime", level=7, skill="combat", x=1, y=-1, drops=['Drop(code="red_slimeball", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)']))
+    green_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Green Slime", code="green_slime", level=4, skill="combat", x=0, y=-1, drops=['Drop(code="green_slimeball", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)']))
+    goblin: ContentMap = field(default_factory=lambda: ContentMap(name="Goblin", code="goblin", level=35, skill="combat", x=6, y=-2, drops=['Drop(code="goblin_tooth", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="goblin_eye", rate=12, min_quantity=1, max_quantity=1)']))
+    wolf: ContentMap = field(default_factory=lambda: ContentMap(name="Wolf", code="wolf", level=15, skill="combat", x=-2, y=1, drops=['Drop(code="raw_wolf_meat", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="wolf_bone", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="wolf_hair", rate=12, min_quantity=1, max_quantity=1)']))
+    ash_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Ash Tree", code="ash_tree", level=1, skill="woodcutting", x=-1, y=0, drops=['Drop(code="ash_wood", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="sap", rate=10, min_quantity=1, max_quantity=1)']))
+    copper_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Copper Rocks", code="copper_rocks", level=1, skill="mining", x=2, y=0, drops=['Drop(code="copper_ore", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="topaz_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="topaz", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="ruby", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="ruby_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire_stone", rate=600, min_quantity=1, max_quantity=1)']))
+    chicken: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="chicken", level=1, skill="combat", x=0, y=1, drops=['Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="egg", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)']))
+    cooking: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="cooking", level=1, skill="combat", x=1, y=1, drops=['Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="egg", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)']))
+    weaponcrafting: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="weaponcrafting", level=1, skill="combat", x=2, y=1, drops=['Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="egg", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)']))
+    gearcrafting: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="gearcrafting", level=1, skill="combat", x=3, y=1, drops=['Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="egg", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)']))
+    bank: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="bank", level=1, skill="combat", x=4, y=1, drops=['Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="egg", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)']))
+    grand_exchange: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="grand_exchange", level=1, skill="combat", x=5, y=1, drops=['Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="egg", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)']))
+    owlbear: ContentMap = field(default_factory=lambda: ContentMap(name="Owlbear", code="owlbear", level=30, skill="combat", x=10, y=1, drops=['Drop(code="owlbear_hair", rate=12, min_quantity=1, max_quantity=1)']))      
+    cow: ContentMap = field(default_factory=lambda: ContentMap(name="Cow", code="cow", level=8, skill="combat", x=0, y=2, drops=['Drop(code="raw_beef", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="milk_bucket", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="cowhide", rate=8, min_quantity=1, max_quantity=1)']))
+    monsters: ContentMap = field(default_factory=lambda: ContentMap(name="Cow", code="monsters", level=8, skill="combat", x=1, y=2, drops=['Drop(code="raw_beef", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="milk_bucket", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="cowhide", rate=8, min_quantity=1, max_quantity=1)']))
+    sunflower: ContentMap = field(default_factory=lambda: ContentMap(name="Sunflower", code="sunflower", level=1, skill="alchemy", x=2, y=2, drops=['Drop(code="sunflower", rate=1, min_quantity=1, max_quantity=1)']))     
+    gudgeon_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Gudgeon Fishing Spot", code="gudgeon_fishing_spot", level=1, skill="fishing", x=4, y=2, drops=['Drop(code="gudgeon", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)']))
+    shrimp_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Shrimp Fishing Spot", code="shrimp_fishing_spot", level=10, skill="fishing", x=5, y=2, drops=['Drop(code="shrimp", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)']))
+    jewelrycrafting: ContentMap = field(default_factory=lambda: ContentMap(name="Owlbear", code="jewelrycrafting", level=30, skill="combat", x=1, y=3, drops=['Drop(code="owlbear_hair", rate=12, min_quantity=1, max_quantity=1)']))
+    alchemy: ContentMap = field(default_factory=lambda: ContentMap(name="Owlbear", code="alchemy", level=30, skill="combat", x=2, y=3, drops=['Drop(code="owlbear_hair", rate=12, min_quantity=1, max_quantity=1)']))       
+    mushmush: ContentMap = field(default_factory=lambda: ContentMap(name="Mushmush", code="mushmush", level=10, skill="combat", x=5, y=3, drops=['Drop(code="mushroom", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="forest_ring", rate=100, min_quantity=1, max_quantity=1)']))
+    flying_serpent: ContentMap = field(default_factory=lambda: ContentMap(name="Flying Serpent", code="flying_serpent", level=12, skill="combat", x=5, y=4, drops=['Drop(code="flying_wing", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="serpent_skin", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="forest_ring", rate=100, min_quantity=1, max_quantity=1)']))
+    mining: ContentMap = field(default_factory=lambda: ContentMap(name="Flying Serpent", code="mining", level=12, skill="combat", x=1, y=5, drops=['Drop(code="flying_wing", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="serpent_skin", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="forest_ring", rate=100, min_quantity=1, max_quantity=1)']))
+    birch_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Birch Tree", code="birch_tree", level=20, skill="woodcutting", x=3, y=5, drops=['Drop(code="birch_wood", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="sap", rate=10, min_quantity=1, max_quantity=1)']))
+    coal_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Coal Rocks", code="coal_rocks", level=20, skill="mining", x=1, y=6, drops=['Drop(code="coal", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="topaz_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="topaz", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="ruby", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="ruby_stone", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire", rate=5000, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire_stone", rate=600, min_quantity=1, max_quantity=1)']))
+    spruce_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Spruce Tree", code="spruce_tree", level=10, skill="woodcutting", x=2, y=6, drops=['Drop(code="spruce_wood", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="sap", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="apple", rate=10, min_quantity=1, max_quantity=1)']))
+    skeleton: ContentMap = field(default_factory=lambda: ContentMap(name="Skeleton", code="skeleton", level=18, skill="combat", x=8, y=6, drops=['Drop(code="skeleton_bone", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="skeleton_skull", rate=16, min_quantity=1, max_quantity=1)']))
+    dead_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Dead Tree", code="dead_tree", level=30, skill="woodcutting", x=9, y=6, drops=['Drop(code="dead_wood", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="sap", rate=10, min_quantity=1, max_quantity=1)']))
+    vampire: ContentMap = field(default_factory=lambda: ContentMap(name="Vampire", code="vampire", level=24, skill="combat", x=10, y=6, drops=['Drop(code="vampire_blood", rate=12, min_quantity=1, max_quantity=1)']))     
+    iron_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Iron Rocks", code="iron_rocks", level=10, skill="mining", x=1, y=7, drops=['Drop(code="iron_ore", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="topaz_stone", rate=500, min_quantity=1, max_quantity=1)', 'Drop(code="topaz", rate=4000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald", rate=4000, min_quantity=1, max_quantity=1)', 'Drop(code="emerald_stone", rate=500, min_quantity=1, max_quantity=1)', 'Drop(code="ruby", rate=4000, min_quantity=1, max_quantity=1)', 'Drop(code="ruby_stone", rate=500, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire", rate=4000, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire_stone", rate=500, min_quantity=1, max_quantity=1)']))
+    death_knight: ContentMap = field(default_factory=lambda: ContentMap(name="Death Knight", code="death_knight", level=28, skill="combat", x=8, y=7, drops=['Drop(code="death_knight_sword", rate=600, min_quantity=1, max_quantity=1)', 'Drop(code="red_cloth", rate=12, min_quantity=1, max_quantity=1)']))
+    lich: ContentMap = field(default_factory=lambda: ContentMap(name="Lich", code="lich", level=30, skill="combat", x=9, y=7, drops=['Drop(code="life_crystal", rate=2000, min_quantity=1, max_quantity=1)', 'Drop(code="lich_crown", rate=600, min_quantity=1, max_quantity=1)']))
+    bat: ContentMap = field(default_factory=lambda: ContentMap(name="Bat", code="bat", level=38, skill="combat", x=8, y=9, drops=['Drop(code="bat_wing", rate=12, min_quantity=1, max_quantity=1)']))
+    demon: ContentMap = field(default_factory=lambda: ContentMap(name="Demon", code="demon", level=30, skill="combat", x=-4, y=9, drops=['Drop(code="demon_horn", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="piece_of_obsidian", rate=12, min_quantity=1, max_quantity=1)']))
+    glowstem: ContentMap = field(default_factory=lambda: ContentMap(name="Glowstem", code="glowstem", level=40, skill="alchemy", x=1, y=10, drops=['Drop(code="glowstem_leaf", rate=1, min_quantity=1, max_quantity=1)']))  
+    imp: ContentMap = field(default_factory=lambda: ContentMap(name="Imp", code="imp", level=28, skill="combat", x=0, y=12, drops=['Drop(code="demoniac_dust", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="piece_of_obsidian", rate=70, min_quantity=1, max_quantity=1)']))
+    maple_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Maple Tree", code="maple_tree", level=40, skill="woodcutting", x=1, y=12, drops=['Drop(code="maple_wood", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="maple_sap", rate=10, min_quantity=1, max_quantity=1)']))
+    bass_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Bass Fishing Spot", code="bass_fishing_spot", level=30, skill="fishing", x=6, y=12, drops=['Drop(code="bass", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)']))
+    trout_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Trout Fishing Spot", code="trout_fishing_spot", level=20, skill="fishing", x=7, y=12, drops=['Drop(code="trout", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)']))
+    mithril_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Mithril Rocks", code="mithril_rocks", level=40, skill="mining", x=-2, y=13, drops=['Drop(code="mithril_ore", rate=1, min_quantity=1, max_quantity=1)', 'Drop(code="topaz_stone", rate=550, min_quantity=1, max_quantity=1)', 'Drop(code="topaz", rate=4500, min_quantity=1, max_quantity=1)', 'Drop(code="emerald", rate=4500, min_quantity=1, max_quantity=1)', 'Drop(code="emerald_stone", rate=550, min_quantity=1, max_quantity=1)', 'Drop(code="ruby", rate=4500, min_quantity=1, max_quantity=1)', 'Drop(code="ruby_stone", rate=550, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire", rate=4500, min_quantity=1, max_quantity=1)', 'Drop(code="sapphire_stone", rate=550, min_quantity=1, max_quantity=1)']))
+    hellhound: ContentMap = field(default_factory=lambda: ContentMap(name="Hellhound", code="hellhound", level=40, skill="combat", x=-1, y=13, drops=['Drop(code="hellhound_hair", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="raw_hellhound_meat", rate=10, min_quantity=1, max_quantity=1)', 'Drop(code="hellhound_bone", rate=12, min_quantity=1, max_quantity=1)']))
+    cultist_acolyte: ContentMap = field(default_factory=lambda: ContentMap(name="Cultist Acolyte", code="cultist_acolyte", level=33, skill="combat", x=1, y=13, drops=['Drop(code="magic_stone", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="cursed_book", rate=20, min_quantity=1, max_quantity=1)']))
+    items: ContentMap = field(default_factory=lambda: ContentMap(name="Cultist Acolyte", code="items", level=33, skill="combat", x=4, y=13, drops=['Drop(code="magic_stone", rate=12, min_quantity=1, max_quantity=1)', 'Drop(code="cursed_book", rate=20, min_quantity=1, max_quantity=1)']))
+    nettle: ContentMap = field(default_factory=lambda: ContentMap(name="Nettle", code="nettle", level=20, skill="alchemy", x=7, y=14, drops=['Drop(code="nettle_leaf", rate=1, min_quantity=1, max_quantity=1)']))       
+
+
 @dataclass
 class Position:
     """Represents a position on a 2D grid."""
     x: int
     y: int
 
-    async def __repr__(self) -> str:
+    def __repr__(self) -> str:
         """String representation of the position in (x, y) format."""
         return f"({self.x}, {self.y})"
 
-    async def dist(self, other: 'Position') -> int:
+    def dist(self, other: 'Position') -> int:
         """
         Calculate the Manhattan distance to another position.
         
@@ -178,10 +199,9 @@ class Position:
         """
         return abs(self.x - other.x) + abs(self.y - other.y)
 
-    async def __iter__(self):
+    def __iter__(self):
         yield self.x
         yield self.y
-
 
 
 @dataclass
@@ -191,14 +211,9 @@ class InventoryItem:
     code: str
     quantity: int
 
-    async def __repr__(self) -> str:
+    def __repr__(self) -> str:
         """String representation of the inventory item."""
         return f"({self.slot}) {self.quantity}x {self.code}"
-    
-    async def __iter__(self):
-        yield self.slot
-        yield self.code 
-        yield self.quantity
 
 
 @dataclass
@@ -210,6 +225,8 @@ class PlayerData:
     position, inventory, equipment slots, and task information.
     """
     name: str
+    account: str
+    skin: str
     level: int
     xp: int
     max_xp: int
@@ -244,6 +261,7 @@ class PlayerData:
 
     # Stats
     hp: int
+    max_hp: int
     haste: int
     critical_strike: int
     stamina: int
@@ -281,9 +299,9 @@ class PlayerData:
     artifact2_slot: str
     artifact3_slot: str
     utility1_slot: str
-    utility1_quantity: int
+    utility1_slot_quantity: int
     utility2_slot: str
-    utility2_quantity: int
+    utility2_slot_quantity: int
     
     # Task information
     task: str
@@ -295,7 +313,7 @@ class PlayerData:
     inventory_max_items: int
     inventory: List[InventoryItem]
 
-    async def get_skill_progress(self, skill: str) -> Tuple[int, float]:
+    def get_skill_progress(self, skill: str) -> Tuple[int, float]:
         """
         Get level and progress percentage for a given skill.
         
@@ -311,7 +329,7 @@ class PlayerData:
         progress = (xp / max_xp) * 100 if max_xp > 0 else 0
         return level, progress
 
-    async def get_equipment_slots(self) -> Dict[str, str]:
+    def get_equipment_slots(self) -> Dict[str, str]:
         """
         Get all equipped items in each slot as a dictionary.
         
@@ -336,7 +354,7 @@ class PlayerData:
             "utility3": self.utility3_slot
         }
 
-    async def get_inventory_space(self) -> int:
+    def get_inventory_space(self) -> int:
         """
         Calculate remaining inventory space.
         
@@ -348,7 +366,7 @@ class PlayerData:
             items += item.quantity
         return self.inventory_max_items - items
 
-    async def has_item(self, item_code: str) -> Tuple[bool, int]:
+    def has_item(self, item_code: str) -> Tuple[bool, int]:
         """
         Check if the player has a specific item and its quantity.
         
@@ -363,7 +381,7 @@ class PlayerData:
                 return True, item.quantity
         return False, 0
 
-    async def get_task_progress_percentage(self) -> float:
+    def get_task_progress_percentage(self) -> float:
         """
         Get the current task progress as a percentage.
         
@@ -372,7 +390,7 @@ class PlayerData:
         """
         return (self.task_progress / self.task_total) * 100 if self.task_total > 0 else 0
     
-    async def __repr__(self) -> str:
+    def __repr__(self) -> str:
         """String representation of player's core stats and skills."""
         ret = \
         f"""{self.name}
@@ -400,30 +418,30 @@ class Account:
         self.api = api
 
     # --- Account Functions ---
-    async def get_bank_details(self) -> dict:
+    def get_bank_details(self) -> dict:
         """Retrieve the details of the player's bank account."""
         endpoint = "my/bank"
-        return await self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
-    async def get_bank_items(self) -> dict:
+    def get_bank_items(self) -> dict:
         """Retrieve the list of items stored in the player's bank."""
         endpoint = "my/bank/items"
-        return await self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
-    async def get_ge_sell_orders(self) -> dict:
+    def get_ge_sell_orders(self) -> dict:
         """Retrieve the player's current sell orders on the Grand Exchange."""
         endpoint = "my/grandexchange/orders"
-        return await self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
-    async def get_ge_sell_history(self) -> dict:
+    def get_ge_sell_history(self) -> dict:
         """Retrieve the player's Grand Exchange sell history."""
         endpoint = "my/grandexchange/history"
-        return await self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
-    async def get_account_details(self) -> dict:
+    def get_account_details(self) -> dict:
         """Retrieve details of the player's account."""
         endpoint = "my/details"
-        return await self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
 class Character:
     def __init__(self, api: "ArtifactsAPI"):
@@ -436,7 +454,7 @@ class Character:
         self.api = api
 
     # --- Character Functions ---
-    async def create_character(self, name: str, skin: str = "men1") -> dict:
+    def create_character(self, name: str, skin: str = "men1") -> dict:
         """
         Create a new character with the given name and skin.
 
@@ -449,9 +467,9 @@ class Character:
         """
         endpoint = "characters/create"
         json = {"name": name, "skin": skin}
-        return await self.api._make_request("POST", endpoint, json=json)
+        return self.api._make_request("POST", endpoint, json=json)
 
-    async def delete_character(self, name: str) -> dict:
+    def delete_character(self, name: str) -> dict:
         """
         Delete a character by name.
 
@@ -463,7 +481,7 @@ class Character:
         """
         endpoint = "characters/delete"
         json = {"name": name}
-        return await self.api._make_request("POST", endpoint, json=json)
+        return self.api._make_request("POST", endpoint, json=json)
 
 class Actions:
     def __init__(self, api: "ArtifactsAPI"):
@@ -476,7 +494,7 @@ class Actions:
         self.api = api
 
     # --- Character Actions ---
-    async def move(self, x: int, y: int) -> dict:
+    def move(self, x: int, y: int) -> dict:
         """
         Move the character to a new position.
 
@@ -489,11 +507,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/move"
         json = {"x": x, "y": y}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def rest(self) -> dict:
+    def rest(self) -> dict:
         """
         Perform a rest action to regain energy.
 
@@ -501,12 +519,12 @@ class Actions:
             dict: Response data confirming rest action.
         """
         endpoint = f"my/{self.api.char.name}/action/rest"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
     # --- Item Action Functions ---
-    async def equip_item(self, item_code: str, slot: str, quantity: int = 1) -> dict:
+    def equip_item(self, item_code: str, slot: str, quantity: int = 1) -> dict:
         """
         Equip an item to a specified slot.
 
@@ -520,11 +538,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/equip"
         json = {"code": item_code, "slot": slot, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def unequip_item(self, slot: str, quantity: int = 1) -> dict:
+    def unequip_item(self, slot: str, quantity: int = 1) -> dict:
         """
         Unequip an item from a specified slot.
 
@@ -537,11 +555,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/unequip"
         json = {"slot": slot, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def use_item(self, item_code: str, quantity: int = 1) -> dict:
+    def use_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Use an item from the player's inventory.
 
@@ -554,11 +572,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/use"
         json = {"code": item_code, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def delete_item(self, item_code: str, quantity: int = 1) -> dict:
+    def delete_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Delete an item from the player's inventory.
 
@@ -571,12 +589,12 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/delete-item"
         json = {"code": item_code, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
     # --- Resource Action Functions ---
-    async def fight(self) -> dict:
+    def fight(self) -> dict:
         """
         Initiate a fight with a monster.
 
@@ -584,11 +602,11 @@ class Actions:
             dict: Response data with fight details.
         """
         endpoint = f"my/{self.api.char.name}/action/fight"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
-    async def gather(self) -> dict:
+    def gather(self) -> dict:
         """
         Gather resources, such as mining, woodcutting, or fishing.
 
@@ -596,11 +614,11 @@ class Actions:
             dict: Response data with gathered resources.
         """
         endpoint = f"my/{self.api.char.name}/action/gathering"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
-    async def craft_item(self, item_code: str, quantity: int = 1) -> dict:
+    def craft_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Craft an item.
 
@@ -611,13 +629,13 @@ class Actions:
         Returns:
             dict: Response data with crafted item details.
         """
-        endpoint = f"my/{self.api.char.name}/action/crafting"
+        endpoint = f"my/{self.api.char.name}/action/craft"
         json = {"code": item_code, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def recycle_item(self, item_code: str, quantity: int = 1) -> dict:
+    def recycle_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Recycle an item.
 
@@ -630,12 +648,12 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/recycle"
         json = {"code": item_code, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
     # --- Bank Action Functions ---
-    async def bank_deposit_item(self, item_code: str, quantity: int = 1) -> dict:
+    def bank_deposit_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Deposit an item into the bank.
 
@@ -648,11 +666,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/deposit"
         json = {"code": item_code, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def bank_deposit_gold(self, amount: int) -> dict:
+    def bank_deposit_gold(self, amount: int) -> dict:
         """
         Deposit gold into the bank.
 
@@ -664,11 +682,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/gold"
         json = {"amount": amount}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def bank_withdraw_item(self, item_code: str, quantity: int = 1) -> dict:
+    def bank_withdraw_item(self, item_code: str, quantity: int = 1) -> dict:
         """
         Withdraw an item from the bank.
 
@@ -681,11 +699,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw"
         json = {"code": item_code, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def bank_withdraw_gold(self, amount: int) -> dict:
+    def bank_withdraw_gold(self, amount: int) -> dict:
         """
         Withdraw gold from the bank.
 
@@ -697,11 +715,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/gold"
         json = {"amount": amount}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def bank_buy_expansion(self) -> dict:
+    def bank_buy_expansion(self) -> dict:
         """
         Purchase an expansion for the bank.
 
@@ -709,12 +727,12 @@ class Actions:
             dict: Response data confirming the expansion purchase.
         """
         endpoint = f"my/{self.api.char.name}/action/bank/buy_expansion"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
     # --- Grand Exchange Actions Functions ---
-    async def ge_buy_item(self, order_id: str, quantity: int = 1) -> dict:
+    def ge_buy_item(self, order_id: str, quantity: int = 1) -> dict:
         """
         Buy an item from the Grand Exchange.
 
@@ -727,11 +745,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
         json = {"id": order_id, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def ge_create_sell_order(self, item_code: str, price: int, quantity: int = 1) -> dict:
+    def ge_create_sell_order(self, item_code: str, price: int, quantity: int = 1) -> dict:
         """
         Create a sell order on the Grand Exchange.
 
@@ -745,11 +763,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
         json = {"code": item_code, "item_code": price, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def ge_cancel_sell_order(self, order_id: str) -> dict:
+    def ge_cancel_sell_order(self, order_id: str) -> dict:
         """
         Cancel an active sell order on the Grand Exchange.
 
@@ -761,12 +779,12 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
         json = {"id": order_id}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
     # --- Taskmaster Action Functions ---
-    async def taskmaster_accept_task(self) -> dict:
+    def taskmaster_accept_task(self) -> dict:
         """
         Accept a new task from the taskmaster.
 
@@ -774,11 +792,11 @@ class Actions:
             dict: Response data confirming task acceptance.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/new"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
-    async def taskmaster_complete_task(self) -> dict:
+    def taskmaster_complete_task(self) -> dict:
         """
         Complete the current task with the taskmaster.
 
@@ -786,11 +804,11 @@ class Actions:
             dict: Response data confirming task completion.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/complete"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
-    async def taskmaster_exchange_task(self) -> dict:
+    def taskmaster_exchange_task(self) -> dict:
         """
         Exchange the current task with the taskmaster.
 
@@ -798,11 +816,11 @@ class Actions:
             dict: Response data confirming task exchange.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/exchange"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
-    async def taskmaster_trade_task(self, item_code: str, quantity: int = 1) -> dict:
+    def taskmaster_trade_task(self, item_code: str, quantity: int = 1) -> dict:
         """
         Trade a task item with another character.
 
@@ -815,11 +833,11 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/trade"
         json = {"code": item_code, "quantity": quantity}
-        res = await self.api._make_request("POST", endpoint, json=json)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint, json=json)
+        self.api.wait_for_cooldown()
         return res
 
-    async def taskmaster_cancel_task(self) -> dict:
+    def taskmaster_cancel_task(self) -> dict:
         """
         Cancel the current task with the taskmaster.
 
@@ -827,8 +845,8 @@ class Actions:
             dict: Response data confirming task cancellation.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/cancel"
-        res = await self.api._make_request("POST", endpoint)
-        await self.api.wait_for_cooldown()
+        res = self.api._make_request("POST", endpoint)
+        self.api.wait_for_cooldown()
         return res
 
 class Maps_Functions:
@@ -842,7 +860,7 @@ class Maps_Functions:
         self.api = api
 
         # --- Map Functions ---
-    async def get_all(self, map_content: Optional[str] = None, content_type: Optional[str] = None, page: int = 1) -> dict:
+    def get_all(self, map_content: Optional[str] = None, content_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of maps with optional filters.
 
@@ -861,9 +879,9 @@ class Maps_Functions:
             query += f"&content_type={content_type}"
         query += f"&page={page}"
         endpoint = f"maps?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get_(self, x: int, y: int) -> dict:
+    def get_map(self, x: int, y: int) -> dict:
         """
         Retrieve map data for a specific coordinate.
 
@@ -875,7 +893,7 @@ class Maps_Functions:
             dict: Response data for the specified map.
         """
         endpoint = f"maps/{x}/{y}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Items:
     def __init__(self, api: "ArtifactsAPI"):
@@ -887,7 +905,7 @@ class Items:
         """
         self.api = api
         # --- Item Functions ---
-    async def get_all(
+    def get_all(
         self, craft_material: Optional[str] = None, craft_skill: Optional[str] = None, max_level: Optional[int] = None,
         min_level: Optional[int] = None, name: Optional[str] = None, item_type: Optional[str] = None, page: int = 1
     ) -> dict:
@@ -922,9 +940,9 @@ class Items:
         if item_type:
             query += f"&item_type={item_type}"
         endpoint = f"items?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get(self, item_code: str) -> dict:
+    def get_item(self, item_code: str) -> dict:
         """
         Retrieve details for a specific item.
 
@@ -935,7 +953,7 @@ class Items:
             dict: Response data for the specified item.
         """
         endpoint = f"items/{item_code}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Monsters:
     def __init__(self, api: "ArtifactsAPI"):
@@ -947,7 +965,7 @@ class Monsters:
         """
         self.api = api
     # --- Monster Functions ---
-    async def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
+    def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
         """
         Retrieve a list of monsters with optional filters.
 
@@ -970,9 +988,9 @@ class Monsters:
         if page:
             query += f"&page={page}"
         endpoint = f"monsters?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
     
-    async def get(self, monster_code: str) -> dict:
+    def get_monster(self, monster_code: str) -> dict:
         """
         Retrieve details for a specific monster.
 
@@ -982,8 +1000,8 @@ class Monsters:
         Returns:
             dict: Response data for the specified monster.
         """
-        endpoint = f"maps/{monster_code}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        endpoint = f"monsters/{monster_code}"
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Resources:
     def __init__(self, api: "ArtifactsAPI"):
@@ -995,7 +1013,7 @@ class Resources:
         """
         self.api = api
     # --- Resource Functions ---
-    async def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, skill: Optional[str] = None, page: int = 1) -> dict:
+    def get_all(self, drop: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, skill: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of resources with optional filters.
 
@@ -1021,9 +1039,9 @@ class Resources:
         if page:
             query += f"&page={page}"
         endpoint = f"resources?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
     
-    async def get(self, resource_code: str) -> dict:
+    def get_resource(self, resource_code: str) -> dict:
         """
         Retrieve details for a specific resource.
 
@@ -1034,7 +1052,7 @@ class Resources:
             dict: Response data for the specified resource.
         """
         endpoint = f"resources/{resource_code}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Events:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1046,7 +1064,7 @@ class Events:
         """
         self.api = api
     # --- Event Functions ---
-    async def get_active(self, page: int = 1) -> dict:
+    def get_active(self, page: int = 1) -> dict:
         """
         Retrieve a list of active events.
 
@@ -1058,9 +1076,9 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events/active?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get_all(self, page: int = 1) -> dict:
+    def get_all(self, page: int = 1) -> dict:
         """
         Retrieve a list of all events.
 
@@ -1072,7 +1090,7 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
 class GE:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1084,7 +1102,7 @@ class GE:
         """
         self.api = api
     # --- Grand Exchange Functions ---
-    async def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the transaction history for a specific item on the Grand Exchange.
 
@@ -1103,9 +1121,9 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/history/{item_code}?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of sell orders on the Grand Exchange with optional filters.
 
@@ -1123,9 +1141,9 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/orders?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get_sell_order(self, order_id: str) -> dict:
+    def get_sell_order(self, order_id: str) -> dict:
         """
         Retrieve details for a specific sell order on the Grand Exchange.
 
@@ -1136,7 +1154,7 @@ class GE:
             dict: Response data for the specified sell order.
         """
         endpoint = f"grandexchange/orders/{order_id}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Tasks:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1148,7 +1166,7 @@ class Tasks:
         """
         self.api = api
     # --- Task Functions ---
-    async def get_all(self, skill: Optional[str] = None, task_type: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
+    def get_all(self, skill: Optional[str] = None, task_type: Optional[str] = None, max_level: Optional[int] = None, min_level: Optional[int] = None, page: int = 1) -> dict:
         """
         Retrieve a list of tasks with optional filters.
 
@@ -1174,9 +1192,9 @@ class Tasks:
         if page:
             query += f"&page={page}"
         endpoint = f"tasks/list?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get(self, task_code: str) -> dict:
+    def get_task(self, task_code: str) -> dict:
         """
         Retrieve details for a specific task.
 
@@ -1187,9 +1205,9 @@ class Tasks:
             dict: Response data for the specified task.
         """
         endpoint = f"tasks/list/{task_code}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get_all_rewards(self, page: int = 1) -> dict:
+    def get_all_rewards(self, page: int = 1) -> dict:
         """
         Retrieve a list of task rewards.
 
@@ -1201,9 +1219,9 @@ class Tasks:
         """
         query = f"size=100&page={page}"    
         endpoint = f"tasks/rewards?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
-    async def get_reward(self, task_code: str) -> dict:
+    def get_reward(self, task_code: str) -> dict:
         """
         Retrieve details for a specific task reward.
 
@@ -1214,7 +1232,7 @@ class Tasks:
             dict: Response data for the specified task reward.
         """
         endpoint = f"tasks/rewards/{task_code}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Achievements:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1226,7 +1244,7 @@ class Achievements:
         """
         self.api = api
     # --- Achievement Functions ---
-    async def get_all(self, achievement_type: Optional[str] = None, page: int = 1) -> dict:
+    def get_all(self, achievement_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of achievements with optional filters.
 
@@ -1242,9 +1260,9 @@ class Achievements:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"achievements?{query}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
     
-    async def get(self, achievement_code: str) -> dict:
+    def get_achievement(self, achievement_code: str) -> dict:
         """
         Retrieve details for a specific achievement.
 
@@ -1255,7 +1273,7 @@ class Achievements:
             dict: Response data for the specified achievement.
         """
         endpoint = f"achievements/{achievement_code}"
-        return await self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint).get("data")
 
 class Leaderboard:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1267,7 +1285,7 @@ class Leaderboard:
         """
         self.api = api
     # --- Leaderboard Functions ---
-    async def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+    def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the characters leaderboard with optional sorting.
 
@@ -1283,9 +1301,9 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/characters?{query}"
-        return await self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
-    async def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+    def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the accounts leaderboard with optional sorting.
 
@@ -1301,7 +1319,7 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/accounts?{query}"
-        return await self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint)
 
 class Accounts:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1312,9 +1330,8 @@ class Accounts:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
-        
     # --- Accounts Functions ---
-    async def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:
+    def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of achievements for a specific account with optional filters.
 
@@ -1334,7 +1351,7 @@ class Accounts:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"/accounts/{account}/achievements?{query}"
-        return await self.api._make_request("GET", endpoint) 
+        return self.api._make_request("GET", endpoint) 
 
 
 
@@ -1364,9 +1381,8 @@ class ArtifactsAPI:
             "Accept": "application/json",
             "Authorization": f'Bearer {self.token}'
         }
-        self.char: None # Placeholder value
-        self.character_name = character_name
-        
+        self.char: PlayerData = self.get_character(character_name=character_name)
+
         # --- Subclass definition ---
         self.account = Account(self)
         self.character = Character(self)
@@ -1383,11 +1399,7 @@ class ArtifactsAPI:
         self.accounts = Accounts(self)
         self.content_maps = ContentMaps()
 
-        
-    async def initialize(self):
-        self.char = await self.get_character(character_name=self.character_name)
-        
-    async def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None) -> dict:
+    def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None) -> dict:
         """
         Makes an API request and returns the JSON response.
 
@@ -1403,20 +1415,26 @@ class ArtifactsAPI:
         Raises:
             APIException: For various HTTP status codes with relevant error messages.
         """
-        async with aiohttp.ClientSession(headers=self.headers) as session:
-            url = f"{self.base_url}/{endpoint.strip('/')}"
-            async with session.request(method, url, json=json) as response:
-                if response.status != 200:
-                    error_message = await response.text()
-                    await self._raise(response.status, error_message)
-                return await response.json()
+        try:
+            endpoint = endpoint.strip("/")
+            if debug and source != "get_character":
+                self._print(endpoint)
+            url = f"{self.base_url}/{endpoint}"
+            response = requests.request(method, url, headers=self.headers, json=json)
+        except Exception as e:
+            self._print(e)
+            self._make_request(method, endpoint, json, source)
+
+        if response.status_code != 200:
+            message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')}, {endpoint}"
+            self._raise(response.status_code, message)
 
         if source != "get_character":
-            await self.get_character()
+            self.get_character()
             
         return response.json()
 
-    async def _print(self, message: Union[str, Exception]) -> None:
+    def _print(self, message: Union[str, Exception]) -> None:
         """
         Prints a message with a timestamp and character name.
 
@@ -1426,7 +1444,7 @@ class ArtifactsAPI:
         m = f"[{self.char.name}] {datetime.now().strftime('%H:%M:%S')} - {message}"
         print(m)
 
-    async def _raise(self, code: int, message: str) -> None:
+    def _raise(self, code: int, message: str) -> None:
         """
         Raises an API exception based on the response code and error message.
 
@@ -1488,27 +1506,27 @@ class ArtifactsAPI:
             case 491:
                 raise APIException.EquipmentSlot(m)
             case 490:
-                await self._print(m)
+                self._print(m)
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
-            
         if code != 200 and code != 490:
             raise Exception(m)
 
 
     # --- Helper Functions ---
-    async def wait_for_cooldown(self) -> None:
+    def wait_for_cooldown(self) -> None:
         """
         Wait for the character's cooldown time to expire, if applicable.
         
         This function prints the cooldown time remaining and pauses
         execution until it has expired.
         """
-        if self.char and self.char.cooldown > 0:
-            await self._print(f"Waiting for cooldown... ({self.char.cooldown} seconds)")
-            await asyncio.sleep(self.char.cooldown)
+        cooldown_time = self.char.cooldown
+        if cooldown_time > 0:
+            self._print(f"Waiting for cooldown... ({cooldown_time} seconds)")
+            time.sleep(cooldown_time)
 
-    async def get_character(self, data: Optional[dict] = None, character_name: Optional[str] = None) -> PlayerData:
+    def get_character(self, data: Optional[dict] = None, character_name: Optional[str] = None) -> PlayerData:
         """
         Retrieve or update the character's data and initialize the character attribute.
 
@@ -1524,8 +1542,7 @@ class ArtifactsAPI:
                 endpoint = f"characters/{character_name}"
             else:
                 endpoint = f"characters/{self.char.name}"
-            res = await self._make_request("GET", endpoint, source="get_character")
-            data = res.get('data')
+            data = self._make_request("GET", endpoint, source="get_character").get('data')
 
         inventory_data = data.get("inventory", [])
         player_inventory: List[InventoryItem] = [
@@ -1535,6 +1552,8 @@ class ArtifactsAPI:
 
         self.char = PlayerData(
             name=data["name"],
+            account=data["account"],
+            skin=data["skin"],
             level=data["level"],
             xp=data["xp"],
             max_xp=data["max_xp"],
@@ -1565,6 +1584,7 @@ class ArtifactsAPI:
             alchemy_xp=data["alchemy_xp"],
             alchemy_max_xp=data["alchemy_max_xp"],
             hp=data["hp"],
+            max_hp=data["max_hp"],
             haste=data["haste"],
             critical_strike=data["critical_strike"],
             stamina=data["stamina"],
@@ -1597,8 +1617,8 @@ class ArtifactsAPI:
             artifact3_slot=data["artifact3_slot"],
             utility1_slot=data["utility1_slot"],
             utility2_slot=data["utility2_slot"],
-            utility1_quantity=data["utility1_slot_quantity"],
-            utility2_quantity=data["utility2_slot_quantity"],
+            utility1_slot_quantity=data["utility1_slot_quantity"],
+            utility2_slot_quantity=data["utility2_slot_quantity"],
             task=data["task"],
             task_type=data["task_type"],
             task_progress=data["task_progress"],

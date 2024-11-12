@@ -442,7 +442,7 @@ class Account:
     def get_bank_items(self, item_code=None, page=1) -> dict:
         """Retrieve the list of items stored in the player's bank."""
         query = "size=100"
-        query += f"item_code={item_code}" if item_code else ""
+        query += f"&item_code={item_code}" if item_code else ""
         query += f"&page={page}"
         endpoint = f"my/bank/items?{query}"
         return self.api._make_request("GET", endpoint)
@@ -450,7 +450,7 @@ class Account:
     def get_ge_sell_orders(self, item_code=None, page=1) -> dict:
         """Retrieve the player's current sell orders on the Grand Exchange."""
         query = "size=100"
-        query += f"item_code={item_code}" if item_code else ""
+        query += f"&item_code={item_code}" if item_code else ""
         query += f"&page={page}"
         endpoint = f"my/grandexchange/orders?{query}"
         return self.api._make_request("GET", endpoint)
@@ -458,8 +458,8 @@ class Account:
     def get_ge_sell_history(self, item_code=None, item_id=None, page=1) -> dict:
         """Retrieve the player's Grand Exchange sell history."""
         query = "size=100"
-        query += f"item_code={item_code}" if item_code else ""
-        query += f"id={item_id}" if item_id else ""
+        query += f"&item_code={item_code}" if item_code else ""
+        query += f"&id={item_id}" if item_id else ""
         query += f"&page={page}"
         endpoint = f"my/grandexchange/history?{query}"
         return self.api._make_request("GET", endpoint)

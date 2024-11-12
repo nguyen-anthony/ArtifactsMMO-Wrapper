@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="artifactsmmo_wrapper",
-    version="1.1.5.2",
+    version="1.1.6",
     author="Veillax",
     author_email="contact@veillax.com",
     description="A Python API Wrapper for ArtifactsMMO",

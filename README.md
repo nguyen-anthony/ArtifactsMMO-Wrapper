@@ -23,7 +23,7 @@ This is a Python wrapper for interacting with the Artifacts MMO API, providing a
 `conda install artifactsmmo-wrapper`
 
 #### Manually using pip (Only use this method if you know what you're doing)
-```powershell
+```bash
 mkdir artifactsmmo-wrapper
 cd artifactsmmo-wrapper
 

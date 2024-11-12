@@ -62,7 +62,7 @@ You can now open the game client by [clicking here](https://artifactsmmo.com/cli
 
 **Ready to start?**
 
-Visit [Not available right now](#) to view the python package
+Visit [ArtifactsMMO Wrapper on PyPi](https://pypi.org/project/artifactsmmo-wrapper/) to view the python package
 
 ## Links
 [ArtifactsMMO Website](https://artifactsmmo.com/)  

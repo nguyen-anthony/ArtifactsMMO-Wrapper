@@ -349,8 +349,7 @@ class PlayerData:
             "artifact2": self.artifact2_slot,
             "artifact3": self.artifact3_slot,
             "utility1": self.utility1_slot,
-            "utility2": self.utility2_slot,
-            "utility3": self.utility3_slot
+            "utility2": self.utility2_slot
         }
 
     def get_inventory_space(self) -> int:
@@ -1353,6 +1352,9 @@ class Accounts:
         return self.api._make_request("GET", endpoint) 
 
 
+    def get_account(self, account: str):
+        endpoint = f"/acounts/{account}"
+        return self.api._make_request("GET", endpoint)
 
 # --- Wrapper ---
 class ArtifactsAPI:

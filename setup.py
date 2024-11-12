@@ -16,7 +16,7 @@ setup(
         "License :: OSI Approved :: GNU Affero General Public License v3",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.11",
+    python_requires=">=3.7",
     install_requires=[
         "requests"
     ],

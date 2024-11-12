@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="artifacts_mmo_wrapper",
+    name="artifactsmmo_wrapper",
     version="1.1.0",
     author="Veillax",
     author_email="contact@veillax.com",
@@ -9,8 +9,8 @@ setup(
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/Veillax/ArtifactsMMO-Wrapper", 
-    packages=find_packages(where="src"),         # Look for packages in 'src' if used
-    package_dir={"": "src"},                     # Maps root package to 'src'
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU Affero General Public License v3",

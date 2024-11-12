@@ -15,6 +15,29 @@ This is a Python wrapper for interacting with the Artifacts MMO API, providing a
 - **Bank and Gold Management**: Deposit and withdraw gold or items.
 - **Leaderboard and Events**: View event and leaderboard data.
 
+## How to install
+#### Using pip (Recommended method)
+`pip install artifactsmmo-wrapper`
+
+#### Using conda (Recommended method)
+`conda install artifactsmmo-wrapper`
+
+#### Manually using pip (Only use this method if you know what you're doing)
+```powershell
+mkdir artifactsmmo-wrapper
+cd artifactsmmo-wrapper
+
+git clone https://github.com/veillax/ArtifactsMMO-Wrapper.git
+cd ArtifactsMMO-Wrapper
+
+# Normal mode
+pip install .
+
+# Editable mode
+# pip install -e .
+
+```
+
 ### Disclaimer
 Some of the following text is taken from the ArtifactsMMO Website to ensure it is accurate and well put for newcommers to be able to understand. It is adapted to 
 ## How to begin playing ArtifactsMMO

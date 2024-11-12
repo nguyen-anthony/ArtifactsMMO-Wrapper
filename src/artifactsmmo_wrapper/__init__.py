@@ -8,8 +8,10 @@ import re
 
 
 def _check_version():
-    outdated_package_info = subprocess.check_output("pip list --outdated", stderr=subprocess.STDOUT).decode("utf-8").split("\n")
-    pattern = r"artifactsmmo-wrapper \(Current: (.+) Latest: (.+)\)"
+    # Run the pip command and get the output as a single string
+    outdated_package_info = subprocess.check_output("pip list --outdated", stderr=subprocess.STDOUT).decode("utf-8")
+    pattern = r"artifactsmmo-wrapper\s+\(Current:\s*(.+?)\s*Latest:\s*(.+?)\)"
+    # Search across the entire output string
     match = re.search(pattern, outdated_package_info)
     if match:
         return True, match.group(1), match.group(2)
@@ -17,7 +19,7 @@ def _check_version():
 
 outdated, version, latest = _check_version()
 if outdated:
-    print(f"Package is outdated. Please run `pip install artifactsmmo-wrapper=={latest} (Installed: {version}, Latest: {latest})")
+    print(f"Package is outdated. Please run `pip install artifactsmmo-wrapper=={latest}` (Installed: {version}, Latest: {latest})")
 
 
 debug=False
@@ -435,7 +437,7 @@ class Account:
         return self.api._make_request("GET", endpoint)
 
     def get_bank_items(self, item_code=None, page=1) -> dict:
-        """Retrieve the list of items stored in the player's bank."""
+          """Retrieve the list of items stored in the player's bank."""
         query = "size=100"
         query += f"item_code={item_code}" if item_code else ""
         query += f"page={page}"

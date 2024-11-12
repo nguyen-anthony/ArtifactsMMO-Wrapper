@@ -107,7 +107,7 @@ class Position:
         """
         Calculate the Manhattan distance to another position.
         
-        Parameters:
+        Args:
             other (Position): The other position to calculate distance to.
         
         Returns:
@@ -316,7 +316,7 @@ class PlayerData:
         """
         Get level and progress percentage for a given skill.
         
-        Parameters:
+        Args:
             skill (str): The skill name (e.g., 'mining', 'fishing').
         
         Returns:
@@ -368,7 +368,7 @@ class PlayerData:
         """
         Check if the player has a specific item and its quantity.
         
-        Parameters:
+        Args:
             item_code (str): The code of the item to check.
         
         Returns:
@@ -410,7 +410,7 @@ class Account:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -446,7 +446,7 @@ class Character:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -456,7 +456,7 @@ class Character:
         """
         Create a new character with the given name and skin.
 
-        Parameters:
+        Args:
             name (str): The name of the new character.
             skin (str): The skin choice for the character (default is "men1").
 
@@ -471,7 +471,7 @@ class Character:
         """
         Delete a character by name.
 
-        Parameters:
+        Args:
             name (str): The name of the character to delete.
 
         Returns:
@@ -481,12 +481,25 @@ class Character:
         json = {"name": name}
         return self.api._make_request("POST", endpoint, json=json)
 
+    def get_logs(self, page: int = 1) -> dict:
+        """_summary_
+
+        Args:
+            page (int): Page number for results. Defaults to 1.
+
+        Returns:
+            dict: Response data with character logs
+        """
+        query = f"size=100&page={page}"
+        endpoint = f"my/logs?{query}"
+        self.api._make_request("GET", endpoint)
+
 class Actions:
     def __init__(self, api: "ArtifactsAPI"):
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -496,7 +509,7 @@ class Actions:
         """
         Move the character to a new position.
 
-        Parameters:
+        Args:
             x (int): X-coordinate to move to.
             y (int): Y-coordinate to move to.
 
@@ -526,7 +539,7 @@ class Actions:
         """
         Equip an item to a specified slot.
 
-        Parameters:
+        Args:
             item_code (str): The code of the item to equip.
             slot (str): The equipment slot.
             quantity (int): The number of items to equip (default is 1).
@@ -544,7 +557,7 @@ class Actions:
         """
         Unequip an item from a specified slot.
 
-        Parameters:
+        Args:
             slot (str): The equipment slot.
             quantity (int): The number of items to unequip (default is 1).
 
@@ -561,7 +574,7 @@ class Actions:
         """
         Use an item from the player's inventory.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to use.
             quantity (int): Quantity of the item to use (default is 1).
 
@@ -578,7 +591,7 @@ class Actions:
         """
         Delete an item from the player's inventory.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to delete.
             quantity (int): Quantity of the item to delete (default is 1).
 
@@ -620,14 +633,14 @@ class Actions:
         """
         Craft an item.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to craft.
             quantity (int): Quantity of the item to craft (default is 1).
 
         Returns:
             dict: Response data with crafted item details.
         """
-        endpoint = f"my/{self.api.char.name}/action/craft"
+        endpoint = f"my/{self.api.char.name}/action/crafting"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json)
         self.api.wait_for_cooldown()
@@ -637,7 +650,7 @@ class Actions:
         """
         Recycle an item.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to recycle.
             quantity (int): Quantity of the item to recycle (default is 1).
 
@@ -655,7 +668,7 @@ class Actions:
         """
         Deposit an item into the bank.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to deposit.
             quantity (int): Quantity of the item to deposit (default is 1).
 
@@ -668,18 +681,18 @@ class Actions:
         self.api.wait_for_cooldown()
         return res
 
-    def bank_deposit_gold(self, amount: int) -> dict:
+    def bank_deposit_gold(self, quantity: int) -> dict:
         """
         Deposit gold into the bank.
 
-        Parameters:
-            amount (int): Amount of gold to deposit.
+        Args:
+            quantity (int): Amount of gold to deposit.
 
         Returns:
             dict: Response data confirming the deposit.
         """
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/gold"
-        json = {"amount": amount}
+        json = {"quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json)
         self.api.wait_for_cooldown()
         return res
@@ -688,7 +701,7 @@ class Actions:
         """
         Withdraw an item from the bank.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to withdraw.
             quantity (int): Quantity of the item to withdraw (default is 1).
 
@@ -701,18 +714,18 @@ class Actions:
         self.api.wait_for_cooldown()
         return res
 
-    def bank_withdraw_gold(self, amount: int) -> dict:
+    def bank_withdraw_gold(self, quantity: int) -> dict:
         """
         Withdraw gold from the bank.
 
-        Parameters:
-            amount (int): Amount of gold to withdraw.
+        Args:
+            quantity (int): Amount of gold to withdraw.
 
         Returns:
             dict: Response data confirming the withdrawal.
         """
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/gold"
-        json = {"amount": amount}
+        json = {"quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json)
         self.api.wait_for_cooldown()
         return res
@@ -734,7 +747,7 @@ class Actions:
         """
         Buy an item from the Grand Exchange.
 
-        Parameters:
+        Args:
             order_id (str): ID of the order to buy from.
             quantity (int): Quantity of the item to buy (default is 1).
 
@@ -751,7 +764,7 @@ class Actions:
         """
         Create a sell order on the Grand Exchange.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to sell.
             price (int): Selling price per unit.
             quantity (int): Quantity of the item to sell (default is 1).
@@ -769,7 +782,7 @@ class Actions:
         """
         Cancel an active sell order on the Grand Exchange.
 
-        Parameters:
+        Args:
             order_id (str): ID of the order to cancel.
 
         Returns:
@@ -822,7 +835,7 @@ class Actions:
         """
         Trade a task item with another character.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item to trade.
             quantity (int): Quantity of the item to trade (default is 1).
 
@@ -852,7 +865,7 @@ class Maps_Functions:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -862,7 +875,7 @@ class Maps_Functions:
         """
         Retrieve a list of maps with optional filters.
 
-        Parameters:
+        Args:
             map_content (Optional[str]): Filter maps by specific content.
             content_type (Optional[str]): Filter maps by content type.
             page (int): Pagination page number (default is 1).
@@ -883,7 +896,7 @@ class Maps_Functions:
         """
         Retrieve map data for a specific coordinate.
 
-        Parameters:
+        Args:
             x (int): X-coordinate of the map.
             y (int): Y-coordinate of the map.
 
@@ -898,7 +911,7 @@ class Items:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -910,7 +923,7 @@ class Items:
         """
         Retrieve a list of items with optional filters.
 
-        Parameters:
+        Args:
             craft_material (Optional[str]): Filter items by crafting material.
             craft_skill (Optional[str]): Filter items by crafting skill.
             max_level (Optional[int]): Maximum level for the items.
@@ -944,7 +957,7 @@ class Items:
         """
         Retrieve details for a specific item.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item.
 
         Returns:
@@ -958,7 +971,7 @@ class Monsters:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -967,7 +980,7 @@ class Monsters:
         """
         Retrieve a list of monsters with optional filters.
 
-        Parameters:
+        Args:
             drop (Optional[str]): Filter monsters by drop item.
             max_level (Optional[int]): Maximum level for the monsters.
             min_level (Optional[int]): Minimum level for the monsters.
@@ -992,7 +1005,7 @@ class Monsters:
         """
         Retrieve details for a specific monster.
 
-        Parameters:
+        Args:
             monster_code (str): Code of the monster.
 
         Returns:
@@ -1006,7 +1019,7 @@ class Resources:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -1015,7 +1028,7 @@ class Resources:
         """
         Retrieve a list of resources with optional filters.
 
-        Parameters:
+        Args:
             drop (Optional[str]): Filter resources by drop item.
             max_level (Optional[int]): Maximum level for the resources.
             min_level (Optional[int]): Minimum level for the resources.
@@ -1043,7 +1056,7 @@ class Resources:
         """
         Retrieve details for a specific resource.
 
-        Parameters:
+        Args:
             resource_code (str): Code of the resource.
 
         Returns:
@@ -1057,7 +1070,7 @@ class Events:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -1066,7 +1079,7 @@ class Events:
         """
         Retrieve a list of active events.
 
-        Parameters:
+        Args:
             page (int): Pagination page number (default is 1).
 
         Returns:
@@ -1080,7 +1093,7 @@ class Events:
         """
         Retrieve a list of all events.
 
-        Parameters:
+        Args:
             page (int): Pagination page number (default is 1).
 
         Returns:
@@ -1095,7 +1108,7 @@ class GE:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -1104,7 +1117,7 @@ class GE:
         """
         Retrieve the transaction history for a specific item on the Grand Exchange.
 
-        Parameters:
+        Args:
             item_code (str): Code of the item.
             buyer (Optional[str]): Filter history by buyer name.
             seller (Optional[str]): Filter history by seller name.
@@ -1125,7 +1138,7 @@ class GE:
         """
         Retrieve a list of sell orders on the Grand Exchange with optional filters.
 
-        Parameters:
+        Args:
             item_code (Optional[str]): Filter by item code.
             seller (Optional[str]): Filter by seller name.
             page (int): Pagination page number (default is 1).
@@ -1145,7 +1158,7 @@ class GE:
         """
         Retrieve details for a specific sell order on the Grand Exchange.
 
-        Parameters:
+        Args:
             order_id (str): ID of the order.
 
         Returns:
@@ -1159,7 +1172,7 @@ class Tasks:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -1168,7 +1181,7 @@ class Tasks:
         """
         Retrieve a list of tasks with optional filters.
 
-        Parameters:
+        Args:
             skill (Optional[str]): Filter tasks by skill.
             task_type (Optional[str]): Filter tasks by type.
             max_level (Optional[int]): Maximum level for the tasks.
@@ -1196,7 +1209,7 @@ class Tasks:
         """
         Retrieve details for a specific task.
 
-        Parameters:
+        Args:
             task_code (str): Code of the task.
 
         Returns:
@@ -1209,7 +1222,7 @@ class Tasks:
         """
         Retrieve a list of task rewards.
 
-        Parameters:
+        Args:
             page (int): Pagination page number (default is 1).
 
         Returns:
@@ -1223,7 +1236,7 @@ class Tasks:
         """
         Retrieve details for a specific task reward.
 
-        Parameters:
+        Args:
             task_code (str): Code of the task reward.
 
         Returns:
@@ -1237,7 +1250,7 @@ class Achievements:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -1246,7 +1259,7 @@ class Achievements:
         """
         Retrieve a list of achievements with optional filters.
 
-        Parameters:
+        Args:
             achievement_type (Optional[str]): Filter achievements by type.
             page (int): Pagination page number (default is 1).
 
@@ -1264,7 +1277,7 @@ class Achievements:
         """
         Retrieve details for a specific achievement.
 
-        Parameters:
+        Args:
             achievement_code (str): Code of the achievement.
 
         Returns:
@@ -1278,7 +1291,7 @@ class Leaderboard:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -1287,7 +1300,7 @@ class Leaderboard:
         """
         Retrieve the characters leaderboard with optional sorting.
 
-        Parameters:
+        Args:
             sort (Optional[str]): Sorting criteria (e.g., 'level', 'xp').
             page (int): Pagination page number (default is 1).
 
@@ -1305,7 +1318,7 @@ class Leaderboard:
         """
         Retrieve the accounts leaderboard with optional sorting.
 
-        Parameters:
+        Args:
             sort (Optional[str]): Sorting criteria (e.g., 'points').
             page (int): Pagination page number (default is 1).
 
@@ -1324,7 +1337,7 @@ class Accounts:
         """
         Initialize with a reference to the main API to access shared methods.
 
-        Parameters:
+        Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
         self.api = api
@@ -1333,7 +1346,7 @@ class Accounts:
         """
         Retrieve a list of achievements for a specific account with optional filters.
 
-        Parameters:
+        Args:
             account (str): Account name.
             completed (Optional[bool]): Filter by completion status (True for completed, False for not).
             achievement_type (Optional[str]): Filter achievements by type.
@@ -1371,7 +1384,7 @@ class ArtifactsAPI:
         """
         Initialize the API wrapper with an API key and character name.
 
-        Parameters:
+        Args:
             api_key (str): API key for authorization.
             character_name (str): Name of the character to retrieve and interact with.
         """
@@ -1404,7 +1417,7 @@ class ArtifactsAPI:
         """
         Makes an API request and returns the JSON response.
 
-        Parameters:
+        Args:
             method (str): HTTP method (e.g., "GET", "POST").
             endpoint (str): API endpoint to send the request to.
             json (Optional[dict]): JSON data to include in the request body.
@@ -1442,7 +1455,7 @@ class ArtifactsAPI:
         """
         Prints a message with a timestamp and character name.
 
-        Parameters:
+        Args:
             message (Union[str, Exception]): The message or exception to print.
         """
         m = f"[{self.char.name}] {datetime.now().strftime('%H:%M:%S')} - {message}"
@@ -1452,7 +1465,7 @@ class ArtifactsAPI:
         """
         Raises an API exception based on the response code and error message.
 
-        Parameters:
+        Args:
             code (int): HTTP status code.
             message (str): Error message.
 
@@ -1534,7 +1547,7 @@ class ArtifactsAPI:
         """
         Retrieve or update the character's data and initialize the character attribute.
 
-        Parameters:
+        Args:
             data (Optional[dict]): Pre-loaded character data; if None, data will be fetched.
             character_name (Optional[str]): Name of the character; only used if data is None.
 

@@ -61,9 +61,9 @@ def mining(api, stop):
     return False
 
 def woodcutting(api, stop):
-    if api.char.mining_level < api.content_maps.maple_tree.level:
-        if api.char.mining_level < api.content_maps.birch_tree.level:
-            if api.char.mining_level < api.content_maps.spruce_tree.level:
+    if api.char.woodcutting_level < api.content_maps.maple_tree.level:
+        if api.char.woodcutting_level < api.content_maps.birch_tree.level:
+            if api.char.woodcutting_level < api.content_maps.spruce_tree.level:
                 content_map = api.content_maps.ash_tree
             else:
                 content_map = api.content_maps.spruce_tree

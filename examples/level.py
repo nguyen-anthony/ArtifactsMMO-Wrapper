@@ -5,7 +5,7 @@ doods = ["YOUR_CHARACTERS_HERE"] # TODO: Make sure to fill in your characters in
 
 
 import threading
-from artifacts_mmo import ArtifactsAPI
+from artifactsmmo_wrapper import ArtifactsAPI
 from itertools import cycle
 
 def deposit(api):

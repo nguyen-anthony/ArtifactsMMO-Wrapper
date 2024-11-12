@@ -44,39 +44,4 @@ You can now open the game client by [clicking here](https://artifactsmmo.com/cli
 
 **Ready to start?**
 
-Client
-The client lets you play with your characters and see all the information you need. It's literally your dashboard for following your characters in real time.
-
-![Client](https://artifactsmmo.com/images/docs/scgame1.png)
-
-On the top left, you have your logs, i.e. all the actions performed by your characters, and when you click on a log, you get all the details.
-
-![Log](https://artifactsmmo.com/images/docs/log_example.png)
-
-At bottom left, a list of your characters, and when you click on a character, you can control it and see all the information about it.
-
-And finally, in the top right-hand corner, you'll find the “Code Editor” button, which opens the Javascript code editor.
-
-Firefox does not fully support the editor. Please use a chromimum-based web browser such as Chrome, Brave or Edge.
-
-The IDE runs in a Node.js environment, so you need to type node name_of_your_script.js in the terminal to run it. By default, the script is called index.js, so you can type node index.js
-
-![IDE](https://artifactsmmo.com/images/docs/ide.png)
-
-### ⚠️ For this wrapper, we won't be able to use the code editor, as this is a Python wrapper, not a Node.js wrapper. Please use an IDE on your computer for the most security, such as [Visual Studio Code](https://code.visualstudio.com/) or [PyCharm Community](https://www.jetbrains.com/pycharm/)
-
-
-### Moving
-The 2D world uses a movement system with X,Y coordinates.
-
-![Map]([img/image-3.png](https://artifactsmmo.com/images/docs/map.png))
-
-To move, you'll need to know the coordinates of the map you want to move your character to. There are several ways of doing this, including using an API request, but for the purposes of this guide, we're going to use the information available in the client.
-
-If you look at (0,1) on the map, you'll find the chicken. A low-level monster that's easy enough to kill when you start the game. We're going to fight him.
-
-![Chicken](https://artifactsmmo.com/images/docs/chicken.png)
-
-
-### For more explanation on how the game works, please visit [https://docs.artifactsmmo.com/quickstart/introduction](https://docs.artifactsmmo.com/quickstart/introduction). 
-### For the documentation on this wrapper, please visit [Website is not available right now, please check back later](docs.veillax.com/artifacts_mmo_wrapper)
+Visit [Not available right now](#) to view the python package

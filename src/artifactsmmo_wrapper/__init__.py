@@ -6,6 +6,20 @@ from datetime import datetime
 import subprocess
 import re
 
+
+def _check_version():
+    outdated_package_info = subprocess.check_output("pip list --outdated", stderr=subprocess.STDOUT).decode("utf-8").split("\n")
+    pattern = r"artifactsmmo-wrapper \(Current: (.+) Latest: (.+)\)"
+    match = re.search(pattern, outdated_package_info)
+    if match:
+        return True, match.group(1), match.group(2)
+    return False, 0, 0
+
+outdated, version, latest = _check_version()
+if outdated:
+    print(f"Package is outdated. Please run `pip install artifactsmmo-wrapper=={latest} (Installed: {version}, Latest: {latest})")
+
+
 debug=False
 
 # --- Exceptions ---
@@ -1395,10 +1409,6 @@ class ArtifactsAPI:
             "Authorization": f'Bearer {self.token}'
         }
         self.char: PlayerData = self.get_character(character_name=character_name)
-
-        outdated, version, latest = self._check_version()
-        if outdated:
-            print(f"Package is outdated. Please run `pip install artifactsmmo-wrapper=={latest} (Installed: {version}, Latest: {latest})")
         
         # --- Subclass definition ---
         self.account = Account(self)
@@ -1415,14 +1425,6 @@ class ArtifactsAPI:
         self.leaderboard = Leaderboard(self)
         self.accounts = Accounts(self)
         self.content_maps = ContentMaps()
-
-    def _check_version(self):
-        outdated_package_info = subprocess.check_output("pip list --outdated", stderr=subprocess.STDOUT).decode("utf-8").split("\n")
-        pattern = r"artifactsmmo-wrapper \(Current: (.+) Latest: (.+)\)"
-        match = re.search(pattern, outdated_package_info)
-        if match:
-            return True, match.group(1), match.group(2)
-        return False, 0, 0
 
     
     def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None) -> dict:

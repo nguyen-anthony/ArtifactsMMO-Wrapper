@@ -1,11 +1,4 @@
 # ArtifactsMMO API Wrapper
-## Links
-[ArtifactsMMO Website](https://artifactsmmo.com/)  
-[ArtifactsMMO Discord](https://discord.com/invite/prEBQ8a6Vs)  
-[ArtifactsMMO Docs](https://docs.artifactsmmo.com/)  
-[ArtifactsMMO Encyclopidea](https://artifactsmmo.com/encyclopedia)  
-[ArtifactsMMO API Docs](https://api.artifactsmmo.com/docs/#/)
-
 ## Disclaimer
 
 This wrapper is a third-party tool and is not officially affiliated with Artifacts MMO. Use it responsibly and at your own risk. Be aware of the game's terms of service and avoid any actions that could violate them.
@@ -45,3 +38,11 @@ You can now open the game client by [clicking here](https://artifactsmmo.com/cli
 **Ready to start?**
 
 Visit [Not available right now](#) to view the python package
+
+## Links
+[ArtifactsMMO Website](https://artifactsmmo.com/)  
+[ArtifactsMMO Discord](https://discord.com/invite/prEBQ8a6Vs)  
+[ArtifactsMMO Docs](https://docs.artifactsmmo.com/)  
+[ArtifactsMMO Encyclopidea](https://artifactsmmo.com/encyclopedia)  
+[ArtifactsMMO API Docs](https://api.artifactsmmo.com/docs/#/)
+

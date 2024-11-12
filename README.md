@@ -43,11 +43,13 @@ Some of the following text is taken from the ArtifactsMMO Website to ensure it i
 ## How to begin playing ArtifactsMMO
 Artifacts is an asynchronous MMORPG in which you can control up to 5 characters at the same time. Your characters can fight monsters, gather resources, craft items and much more.
 
+This wrapper however is thus far a synchronous wrapper, so you have to use the threading module to control more than one character at once
+
 Unlike a traditional game, you'll have to write your own scripts in your preferred programming language to control your characters via an API.
 
 This wrapper is an easy way to get started with playing ArtifactsMMO Season 3. It allows you to access the API without writing too much complex code.
 
-For another quick start, you can write your first Javascript scripts directly in the client's code editor, otherwise you can use any language you like on your own IDE. You can see examples in other programming languages in the [Reference API](https://api.artifactsmmo.com/docs/#/).
+For another quick start, you can write your own Javascript scripts directly in the client's code editor, otherwise you can use any language you like on your own IDE. You can see examples in other programming languages in the [Reference API](https://api.artifactsmmo.com/docs/#/).
 
 ## Before You Begin
 The first step is to [create your account](https://artifactsmmo.com/account/create) and your first character [by logging in](https://artifactsmmo.com/account/characters). After that you'll need your token, which you can find [on your account](https://artifactsmmo.com/account/).

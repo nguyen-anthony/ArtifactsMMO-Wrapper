@@ -440,7 +440,7 @@ class Account:
         return self.api._make_request("GET", endpoint)
 
     def get_bank_items(self, item_code=None, page=1) -> dict:
-          """Retrieve the list of items stored in the player's bank."""
+        """Retrieve the list of items stored in the player's bank."""
         query = "size=100"
         query += f"item_code={item_code}" if item_code else ""
         query += f"page={page}"

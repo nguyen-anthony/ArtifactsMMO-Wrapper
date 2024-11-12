@@ -1428,6 +1428,9 @@ class ArtifactsAPI:
 
         if response.status_code != 200:
             message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')}, {endpoint}"
+            message += f", {json}" if json else ""
+            message += f", {source}" if source else ""
+
             self._raise(response.status_code, message)
 
         if source != "get_character":

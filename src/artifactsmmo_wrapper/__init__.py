@@ -8,14 +8,17 @@ import re
 
 
 def _check_version():
-    # Run the pip command and get the output as a single string
-    outdated_package_info = subprocess.check_output("pip list --outdated", stderr=subprocess.STDOUT).decode("utf-8")
-    pattern = r"artifactsmmo-wrapper\s+\(Current:\s*(.+?)\s*Latest:\s*(.+?)\)"
-    # Search across the entire output string
-    match = re.search(pattern, outdated_package_info)
-    if match:
-        return True, match.group(1), match.group(2)
-    return False, 0, 0
+    try:
+        # Run the pip command and get the output as a single string
+        outdated_package_info = subprocess.check_output("pip list --outdated", stderr=subprocess.STDOUT).decode("utf-8")
+        pattern = r"artifactsmmo-wrapper\s+\(Current:\s*(.+?)\s*Latest:\s*(.+?)\)"
+        # Search across the entire output string
+        match = re.search(pattern, outdated_package_info)
+        if match:
+            return True, match.group(1), match.group(2)
+        return False, 0, 0
+    except:
+        return False, 0, 0
 
 outdated, version, latest = _check_version()
 if outdated:

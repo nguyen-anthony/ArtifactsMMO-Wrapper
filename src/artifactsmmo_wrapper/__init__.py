@@ -1496,7 +1496,7 @@ class ArtifactsAPI:
         self.content_maps = ContentMaps()
 
     
-    def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None) -> dict:
+    def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None, retries: int = 3) -> dict:
         """
         Makes an API request and returns the JSON response.
 
@@ -1533,7 +1533,9 @@ class ArtifactsAPI:
 
         except Exception as e:
             logger.error(e)
-            self._make_request(method, endpoint, json, source)
+            if retries:
+                retries -= 1
+                self._make_request(method, endpoint, json, source, retries)
 
 
     def _print(self, message: Union[str, Exception]) -> None:

@@ -5,27 +5,79 @@ from typing import List, Dict, Optional, Tuple, Union
 from datetime import datetime
 import subprocess
 import re
+import logging
+import sys
 
+debug=False
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG if debug else logger.level)
+
+# Define the logging format you want to apply
+formatter = logging.Formatter(
+    fmt="%(asctime)s -  %(levelname)s - %(message)s", 
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# Create a handler (e.g., StreamHandler for console output) and set its format
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+# Attach the handler to the parent logger (if not already present)
+if not logger.hasHandlers():
+    logger.addHandler(console_handler)
 
 def _check_version():
     try:
         # Run the pip command and get the output as a single string
-        outdated_package_info = subprocess.check_output("pip list --outdated", stderr=subprocess.STDOUT).decode("utf-8")
+        proc = subprocess.Popen("pip list --outdated", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        outdated_package_info, _ = proc.communicate()
         pattern = r"artifactsmmo-wrapper\s+\(Current:\s*(.+?)\s*Latest:\s*(.+?)\)"
         # Search across the entire output string
         match = re.search(pattern, outdated_package_info)
         if match:
             return True, match.group(1), match.group(2)
         return False, 0, 0
-    except:
+    except Exception as e:
+        logger.error(f"Failed to check package version: {e}")
         return False, 0, 0
 
-outdated, version, latest = _check_version()
-if outdated:
-    print(f"Package is outdated. Please run `pip install artifactsmmo-wrapper=={latest}` (Installed: {version}, Latest: {latest})")
+def _update_package():
+    try:
+        # Update the specific package
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "artifactsmmo-wrapper"])
+        logger.info("Package updated successfully.")
+        python = sys.executable
+        logger.info(f"Please restart the script using {[python] + sys.argv}")
+        exit(0)
+    except Exception as e:
+        logger.error(f"Failed to update package: {e}")
+        sys.exit(1)
 
+def _prompt_update(version, latest):
+    logger.warning(f"Package is outdated. (Installed: {version}, Latest: {latest})")
+    valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
+    prompt = "[Y/n]"
+    question = "Would you like to update the wrapper?"
 
-debug=False
+    while True:
+        choice = input(f"{question} {prompt} ").lower()
+        if choice in valid:
+            if valid[choice]:
+                logger.debug("User selected `y`. Updating package.")
+                _update_package()
+            else:
+                logger.debug("User selected `n`. Skipping package import")
+                logger.info("Please make sure to update the package when next available.")
+            break
+        else:
+            sys.stdout.write("Please respond with 'y' or 'n' (or 'yes' or 'no').\n")
+
+_outdated, _version, _latest = _check_version()
+if _outdated:
+    _prompt_update(_version, _latest)
+
 
 # --- Exceptions ---
 class APIException(Exception):
@@ -437,7 +489,7 @@ class Account:
     def get_bank_details(self) -> dict:
         """Retrieve the details of the player's bank account."""
         endpoint = "my/bank"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_bank_details")
 
     def get_bank_items(self, item_code=None, page=1) -> dict:
         """Retrieve the list of items stored in the player's bank."""
@@ -445,7 +497,7 @@ class Account:
         query += f"&item_code={item_code}" if item_code else ""
         query += f"&page={page}"
         endpoint = f"my/bank/items?{query}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_bank_items")
 
     def get_ge_sell_orders(self, item_code=None, page=1) -> dict:
         """Retrieve the player's current sell orders on the Grand Exchange."""
@@ -453,7 +505,7 @@ class Account:
         query += f"&item_code={item_code}" if item_code else ""
         query += f"&page={page}"
         endpoint = f"my/grandexchange/orders?{query}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_ge_sell_orders")
 
     def get_ge_sell_history(self, item_code=None, item_id=None, page=1) -> dict:
         """Retrieve the player's Grand Exchange sell history."""
@@ -462,12 +514,12 @@ class Account:
         query += f"&id={item_id}" if item_id else ""
         query += f"&page={page}"
         endpoint = f"my/grandexchange/history?{query}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_ge_sell_history")
 
     def get_account_details(self) -> dict:
         """Retrieve details of the player's account."""
         endpoint = "my/details"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_account_details")
 
 class Character:
     def __init__(self, api: "ArtifactsAPI"):
@@ -493,7 +545,7 @@ class Character:
         """
         endpoint = "characters/create"
         json = {"name": name, "skin": skin}
-        return self.api._make_request("POST", endpoint, json=json)
+        return self.api._make_request("POST", endpoint, json=json, source="create_character")
 
     def delete_character(self, name: str) -> dict:
         """
@@ -507,7 +559,7 @@ class Character:
         """
         endpoint = "characters/delete"
         json = {"name": name}
-        return self.api._make_request("POST", endpoint, json=json)
+        return self.api._make_request("POST", endpoint, json=json, source="delete_character")
 
     def get_logs(self, page: int = 1) -> dict:
         """_summary_
@@ -520,7 +572,7 @@ class Character:
         """
         query = f"size=100&page={page}"
         endpoint = f"my/logs?{query}"
-        self.api._make_request("GET", endpoint)
+        self.api._make_request("GET", endpoint, source="get_logs")
 
 class Actions:
     def __init__(self, api: "ArtifactsAPI"):
@@ -546,7 +598,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/move"
         json = {"x": x, "y": y}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="move")
         self.api.wait_for_cooldown()
         return res
 
@@ -558,7 +610,7 @@ class Actions:
             dict: Response data confirming rest action.
         """
         endpoint = f"my/{self.api.char.name}/action/rest"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="rest")
         self.api.wait_for_cooldown()
         return res
 
@@ -577,7 +629,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/equip"
         json = {"code": item_code, "slot": slot, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="equip_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -594,7 +646,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/unequip"
         json = {"slot": slot, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="unequip_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -611,7 +663,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/use"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="use_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -628,7 +680,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/delete-item"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="delete_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -641,7 +693,7 @@ class Actions:
             dict: Response data with fight details.
         """
         endpoint = f"my/{self.api.char.name}/action/fight"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="fight")
         self.api.wait_for_cooldown()
         return res
 
@@ -653,7 +705,7 @@ class Actions:
             dict: Response data with gathered resources.
         """
         endpoint = f"my/{self.api.char.name}/action/gathering"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="gather")
         self.api.wait_for_cooldown()
         return res
 
@@ -670,7 +722,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/crafting"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="craft_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -687,7 +739,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/recycle"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="recycle_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -705,7 +757,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/deposit"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -721,7 +773,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/gold"
         json = {"quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_gold")
         self.api.wait_for_cooldown()
         return res
 
@@ -738,7 +790,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_item")
         self.api.wait_for_cooldown()
         return res
 
@@ -754,7 +806,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/gold"
         json = {"quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_gold")
         self.api.wait_for_cooldown()
         return res
 
@@ -766,7 +818,7 @@ class Actions:
             dict: Response data confirming the expansion purchase.
         """
         endpoint = f"my/{self.api.char.name}/action/bank/buy_expansion"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="bank_buy_expansion")
         self.api.wait_for_cooldown()
         return res
 
@@ -784,7 +836,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
         json = {"id": order_id, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_buy")
         self.api.wait_for_cooldown()
         return res
 
@@ -802,7 +854,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
         json = {"code": item_code, "item_code": price, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_sell")
         self.api.wait_for_cooldown()
         return res
 
@@ -818,7 +870,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
         json = {"id": order_id}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_cancel_sell")
         self.api.wait_for_cooldown()
         return res
 
@@ -831,7 +883,7 @@ class Actions:
             dict: Response data confirming task acceptance.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/new"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="accept_task")
         self.api.wait_for_cooldown()
         return res
 
@@ -843,7 +895,7 @@ class Actions:
             dict: Response data confirming task completion.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/complete"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="complete_task")
         self.api.wait_for_cooldown()
         return res
 
@@ -855,7 +907,7 @@ class Actions:
             dict: Response data confirming task exchange.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/exchange"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="exchange_task")
         self.api.wait_for_cooldown()
         return res
 
@@ -872,7 +924,7 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/trade"
         json = {"code": item_code, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json)
+        res = self.api._make_request("POST", endpoint, json=json, source="trade_task")
         self.api.wait_for_cooldown()
         return res
 
@@ -884,7 +936,7 @@ class Actions:
             dict: Response data confirming task cancellation.
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/cancel"
-        res = self.api._make_request("POST", endpoint)
+        res = self.api._make_request("POST", endpoint, source="cancel_task")
         self.api.wait_for_cooldown()
         return res
  
@@ -918,7 +970,7 @@ class Maps_Functions:
             query += f"&content_type={content_type}"
         query += f"&page={page}"
         endpoint = f"maps?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_maps").get("data")
 
     def get_map(self, x: int, y: int) -> dict:
         """
@@ -932,7 +984,7 @@ class Maps_Functions:
             dict: Response data for the specified map.
         """
         endpoint = f"maps/{x}/{y}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_map").get("data")
 
 class Items:
     def __init__(self, api: "ArtifactsAPI"):
@@ -979,7 +1031,7 @@ class Items:
         if item_type:
             query += f"&item_type={item_type}"
         endpoint = f"items?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_items").get("data")
 
     def get_item(self, item_code: str) -> dict:
         """
@@ -992,7 +1044,7 @@ class Items:
             dict: Response data for the specified item.
         """
         endpoint = f"items/{item_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_item").get("data")
 
 class Monsters:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1027,7 +1079,7 @@ class Monsters:
         if page:
             query += f"&page={page}"
         endpoint = f"monsters?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_monsters").get("data")
     
     def get_monster(self, monster_code: str) -> dict:
         """
@@ -1040,7 +1092,7 @@ class Monsters:
             dict: Response data for the specified monster.
         """
         endpoint = f"monsters/{monster_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_monster").get("data")
 
 class Resources:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1078,7 +1130,7 @@ class Resources:
         if page:
             query += f"&page={page}"
         endpoint = f"resources?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_resources").get("data")
     
     def get_resource(self, resource_code: str) -> dict:
         """
@@ -1091,7 +1143,7 @@ class Resources:
             dict: Response data for the specified resource.
         """
         endpoint = f"resources/{resource_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_resource").get("data")
 
 class Events:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1115,7 +1167,7 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events/active?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_active_events").get("data")
 
     def get_all(self, page: int = 1) -> dict:
         """
@@ -1129,7 +1181,7 @@ class Events:
         """
         query = f"size=100&page={page}"
         endpoint = f"events?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_events").get("data")
 
 class GE:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1160,7 +1212,7 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/history/{item_code}?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_ge_history").get("data")
 
     def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
         """
@@ -1180,7 +1232,7 @@ class GE:
         if seller:
             query += f"&seller={seller}"
         endpoint = f"grandexchange/orders?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_ge_sell_orders").get("data")
 
     def get_sell_order(self, order_id: str) -> dict:
         """
@@ -1193,7 +1245,7 @@ class GE:
             dict: Response data for the specified sell order.
         """
         endpoint = f"grandexchange/orders/{order_id}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_ge_sell_order").get("data")
 
 class Tasks:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1231,7 +1283,7 @@ class Tasks:
         if page:
             query += f"&page={page}"
         endpoint = f"tasks/list?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_tasks").get("data")
 
     def get_task(self, task_code: str) -> dict:
         """
@@ -1244,7 +1296,7 @@ class Tasks:
             dict: Response data for the specified task.
         """
         endpoint = f"tasks/list/{task_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_task").get("data")
 
     def get_all_rewards(self, page: int = 1) -> dict:
         """
@@ -1258,7 +1310,7 @@ class Tasks:
         """
         query = f"size=100&page={page}"    
         endpoint = f"tasks/rewards?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_task_rewards").get("data")
 
     def get_reward(self, task_code: str) -> dict:
         """
@@ -1271,7 +1323,7 @@ class Tasks:
             dict: Response data for the specified task reward.
         """
         endpoint = f"tasks/rewards/{task_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_task_reward").get("data")
 
 class Achievements:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1299,7 +1351,7 @@ class Achievements:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"achievements?{query}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_all_achievements").get("data")
     
     def get_achievement(self, achievement_code: str) -> dict:
         """
@@ -1312,7 +1364,7 @@ class Achievements:
             dict: Response data for the specified achievement.
         """
         endpoint = f"achievements/{achievement_code}"
-        return self.api._make_request("GET", endpoint).get("data")
+        return self.api._make_request("GET", endpoint, source="get_achievement").get("data")
 
 class Leaderboard:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1340,7 +1392,7 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/characters?{query}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_characters_leaderboard")
 
     def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
         """
@@ -1358,7 +1410,7 @@ class Leaderboard:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/accounts?{query}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_accounts_leaderboard")
 
 class Accounts:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1390,12 +1442,12 @@ class Accounts:
             query += f"&achievement_type={achievement_type}"
         query += f"&page={page}"
         endpoint = f"/accounts/{account}/achievements?{query}"
-        return self.api._make_request("GET", endpoint) 
+        return self.api._make_request("GET", endpoint, source="get_account_achievements") 
 
 
     def get_account(self, account: str):
         endpoint = f"/acounts/{account}"
-        return self.api._make_request("GET", endpoint)
+        return self.api._make_request("GET", endpoint, source="get_account")
 
 # --- Wrapper ---
 class ArtifactsAPI:
@@ -1460,12 +1512,12 @@ class ArtifactsAPI:
         """
         try:
             endpoint = endpoint.strip("/")
-            if debug and source != "get_character":
-                self._print(endpoint)
+            if source != "get_character":
+                logger.debug(endpoint)
             url = f"{self.base_url}/{endpoint}"
             response = requests.request(method, url, headers=self.headers, json=json)
         except Exception as e:
-            self._print(e)
+            logger.error(e)
             self._make_request(method, endpoint, json, source)
 
         if response.status_code != 200:
@@ -1487,7 +1539,7 @@ class ArtifactsAPI:
         Args:
             message (Union[str, Exception]): The message or exception to print.
         """
-        m = f"[{self.char.name}] {datetime.now().strftime('%H:%M:%S')} - {message}"
+        m = f" - {message}"
         print(m)
 
     def _raise(self, code: int, message: str) -> None:
@@ -1552,7 +1604,7 @@ class ArtifactsAPI:
             case 491:
                 raise APIException.EquipmentSlot(m)
             case 490:
-                self._print(m)
+                logger.warning(m)
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
         if code != 200 and code != 490:
@@ -1569,7 +1621,7 @@ class ArtifactsAPI:
         """
         cooldown_time = self.char.cooldown
         if cooldown_time > 0:
-            self._print(f"Waiting for cooldown... ({cooldown_time} seconds)")
+            logger.debug(f"Waiting for cooldown... ({cooldown_time} seconds)")
             time.sleep(cooldown_time)
 
     def get_character(self, data: Optional[dict] = None, character_name: Optional[str] = None) -> PlayerData:

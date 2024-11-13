@@ -10,6 +10,7 @@ import sys
 
 debug=False
 
+checked_version = False
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +73,6 @@ def _prompt_update(version, latest):
             break
         else:
             sys.stdout.write("Please respond with 'y' or 'n' (or 'yes' or 'no').\n")
-
-_outdated, _version, _latest = _check_version()
-logger.debug(_outdated, _version, _latest)
-if _outdated:
-    _prompt_update(_version, _latest)
 
 
 # --- Exceptions ---
@@ -1476,7 +1472,13 @@ class ArtifactsAPI:
             "Authorization": f'Bearer {self.token}'
         }
         self.char: PlayerData = self.get_character(character_name=character_name)
-        
+        if not checked_version:
+            _outdated, _version, _latest = _check_version()
+            logger.debug(_outdated, _version, _latest)
+            if _outdated:
+                _prompt_update(_version, _latest)
+            checked_version = True
+
         # --- Subclass definition ---
         self.account = Account(self)
         self.character = Character(self)
@@ -1516,21 +1518,23 @@ class ArtifactsAPI:
                 logger.debug(endpoint)
             url = f"{self.base_url}/{endpoint}"
             response = requests.request(method, url, headers=self.headers, json=json)
+
+            if response.status_code != 200:
+                message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')} Endpoint: {endpoint}"
+                message += f", Body: {json}" if json else ""
+                message += f", Source: {source}" if source else ""
+
+                self._raise(response.status_code, message)
+
+            if source != "get_character":
+                self.get_character()
+                
+            return response.json()
+
         except Exception as e:
             logger.error(e)
             self._make_request(method, endpoint, json, source)
 
-        if response.status_code != 200:
-            message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')} Endpoint: {endpoint}"
-            message += f", Body: {json}" if json else ""
-            message += f", Source: {source}" if source else ""
-
-            self._raise(response.status_code, message)
-
-        if source != "get_character":
-            self.get_character()
-            
-        return response.json()
 
     def _print(self, message: Union[str, Exception]) -> None:
         """

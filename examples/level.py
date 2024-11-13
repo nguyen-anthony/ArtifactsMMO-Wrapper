@@ -7,6 +7,22 @@ import threading
 import artifactsmmo_wrapper as wrapper
 from itertools import cycle
 import time
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Define the logging format you want to apply
+formatter = logging.Formatter(
+    fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+# Create a handler (e.g., StreamHandler for console output) and set its format
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+
+logger.addHandler(console_handler)
 
 def deposit(api):
     # Deposit items and gold in the bank

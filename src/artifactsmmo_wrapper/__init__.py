@@ -12,11 +12,10 @@ debug=False
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG if debug else logger.level)
 
 # Define the logging format you want to apply
 formatter = logging.Formatter(
-    fmt="%(asctime)s -  %(levelname)s - %(message)s", 
+    fmt="[%(levelname)s] %(asctime)s - %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 

@@ -14,7 +14,7 @@ logger.setLevel(logging.INFO)
 
 # Define the logging format you want to apply
 formatter = logging.Formatter(
-    fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
+    fmt="[%(levelname)s] %(asctime)s - %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
@@ -47,7 +47,7 @@ def deposit(api):
         
     if d == "Deposited ":
         d += "nothing"
-    api._print(d)
+    logger.info(d)
 
 def mining(api, stop):
     # Mining routine based on character's level
@@ -63,7 +63,7 @@ def mining(api, stop):
     else:
         content_map = api.content_maps.copper_rocks
 
-    api._print(f"Mining {content_map.name}")
+    logger.info(f"Mining {content_map.name}")
     api.actions.move(*content_map)
     while not stop.is_set():
         try:
@@ -71,7 +71,7 @@ def mining(api, stop):
                 return True
             api.actions.gather()
         except Exception as e:
-            api._print(f"Mining error: {e}")
+            logger.error(f"Mining error: {e}")
             stop.set()
             return True
     return False
@@ -88,7 +88,7 @@ def woodcutting(api, stop):
     else:
         content_map = api.content_maps.ash_tree
 
-    api._print(f"Cutting {content_map.name}")
+    logger.debug(f"Cutting {content_map.name}")
     api.actions.move(*content_map)
     while not stop.is_set():
         try:
@@ -96,7 +96,7 @@ def woodcutting(api, stop):
                 return True
             api.actions.gather()
         except Exception as e:
-            api._print(f"Woodcutting error: {e}")
+            logger.error(f"Woodcutting error: {e}")
             stop.set()
             return True
     return False
@@ -108,7 +108,7 @@ def combat(api, stop):
         api.actions.rest()
     content_map = api.content_maps.chicken
 
-    api._print(f"Fighting {content_map.name}")
+    logger.info(f"Fighting {content_map.name}")
     api.actions.move(*content_map)
     while not stop.is_set() and time.time() < end_time:
         try:
@@ -117,7 +117,7 @@ def combat(api, stop):
             api.actions.fight()
             api.actions.rest()
         except Exception as e:
-            api._print(f"Combat error: {e}")
+            logger.error(f"Combat error: {e}")
             stop.set()
             return False
     return False

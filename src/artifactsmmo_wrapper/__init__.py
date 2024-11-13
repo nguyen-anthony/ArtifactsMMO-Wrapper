@@ -75,6 +75,7 @@ def _prompt_update(version, latest):
             sys.stdout.write("Please respond with 'y' or 'n' (or 'yes' or 'no').\n")
 
 _outdated, _version, _latest = _check_version()
+logger.debug(_outdated, _version, _latest)
 if _outdated:
     _prompt_update(_version, _latest)
 
@@ -1521,9 +1522,9 @@ class ArtifactsAPI:
             self._make_request(method, endpoint, json, source)
 
         if response.status_code != 200:
-            message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')}, {endpoint}"
-            message += f", {json}" if json else ""
-            message += f", {source}" if source else ""
+            message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')} Endpoint: {endpoint}"
+            message += f", Body: {json}" if json else ""
+            message += f", Source: {source}" if source else ""
 
             self._raise(response.status_code, message)
 

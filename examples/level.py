@@ -1,13 +1,15 @@
 # This example helps you level your mining, woodcutting, and player level, and it changes which resource is farmed depending on the player level
 # This example relies on the package to be installed. Please install it using pip install --upgrade artifactsmmo-wrapper
-token = "YOUR_TOKEN_HERE" # TODO: Make sure to paste your token here
+TOKEN = "YOUR_TOKEN_HERE" # TODO: Make sure to paste your token here
 doods = ["YOUR_CHARACTERS_HERE"] # TODO: Make sure to fill in your characters into this array. If you have 1, or if you have 5, make sure to put them here
 
 import threading
-from artifactsmmo_wrapper import ArtifactsAPI
+import artifactsmmo_wrapper as wrapper
 from itertools import cycle
+import time
 
 def deposit(api):
+    # Deposit items and gold in the bank
     items = ""
     golds = 0
     api.actions.move(*api.content_maps.bank)
@@ -20,90 +22,93 @@ def deposit(api):
         api.actions.bank_deposit_gold(api.char.gold)
     
     items = items.strip().strip(",")
-    d = "Deposited"
+    d = "Deposited "
     if items:
         d += items
     
     if golds:
-        d += str(golds)
+        d += f", {str(golds)} gold"
         
-    if d == "Deposited":
-        d += " nothing"
+    if d == "Deposited ":
+        d += "nothing"
     api._print(d)
 
-
 def mining(api, stop):
-    if api.char.mining_level < api.content_maps.mithril_rocks.level:
-        if api.char.mining_level < api.content_maps.gold_rocks.level:
-            if api.char.mining_level < api.content_maps.coal_rocks.level:
-                if api.char.mining_level < api.content_maps.iron_rocks.level:
-                    content_map = api.content_maps.copper_rocks
-                else:
-                    content_map = api.content_maps.iron_rocks
-            else:
-                content_map = api.content_maps.coal_rocks
-        else:
-            content_map = api.content_maps.gold_rocks
-    else:
+    # Mining routine based on character's level
+    content_map = api.content_maps.copper_rocks
+    if api.char.mining_level >= api.content_maps.mithril_rocks.level:
         content_map = api.content_maps.mithril_rocks
-        
+    elif api.char.mining_level >= api.content_maps.gold_rocks.level:
+        content_map = api.content_maps.gold_rocks
+    elif api.char.mining_level >= api.content_maps.coal_rocks.level:
+        content_map = api.content_maps.coal_rocks
+    elif api.char.mining_level >= api.content_maps.iron_rocks.level:
+        content_map = api.content_maps.iron_rocks
+    else:
+        content_map = api.content_maps.copper_rocks
+
     api._print(f"Mining {content_map.name}")
     api.actions.move(*content_map)
     while not stop.is_set():
         try:
             if api.char.get_inventory_space() < 5:
-                return True  # Return True to indicate we need to deposit
+                return True
             api.actions.gather()
-        except:
+        except Exception as e:
+            api._print(f"Mining error: {e}")
             stop.set()
-            exit(0)()
             return True
     return False
 
 def woodcutting(api, stop):
-    if api.char.woodcutting_level < api.content_maps.maple_tree.level:
-        if api.char.woodcutting_level < api.content_maps.birch_tree.level:
-            if api.char.woodcutting_level < api.content_maps.spruce_tree.level:
-                content_map = api.content_maps.ash_tree
-            else:
-                content_map = api.content_maps.spruce_tree
-        else:
-            content_map = api.content_maps.birch_tree
-    else:
+    # Woodcutting routine based on character's level
+    content_map = api.content_maps.ash_tree
+    if api.char.woodcutting_level >= api.content_maps.maple_tree.level:
         content_map = api.content_maps.maple_tree
+    elif api.char.woodcutting_level >= api.content_maps.birch_tree.level:
+        content_map = api.content_maps.birch_tree
+    elif api.char.woodcutting_level >= api.content_maps.spruce_tree.level:
+        content_map = api.content_maps.spruce_tree
+    else:
+        content_map = api.content_maps.ash_tree
 
     api._print(f"Cutting {content_map.name}")
     api.actions.move(*content_map)
     while not stop.is_set():
         try:
             if api.char.get_inventory_space() < 5:
-                return True  # Return True to indicate we need to deposit
+                return True
             api.actions.gather()
-        except:
+        except Exception as e:
+            api._print(f"Woodcutting error: {e}")
             stop.set()
-            exit(0)()
             return True
     return False
 
 def combat(api, stop):
+    # Combat routine with a time limit
+    end_time = time.time() + 5400
+    if api.char.hp < api.char.max_hp:
+        api.actions.rest()
     content_map = api.content_maps.chicken
 
     api._print(f"Fighting {content_map.name}")
     api.actions.move(*content_map)
-    while not stop.is_set():
+    while not stop.is_set() and time.time() < end_time:
         try:
             if api.char.get_inventory_space() < (api.char.inventory_max_items / 2):
-                return True  # Return True to indicate we need to deposit
+                return True
             api.actions.fight()
             api.actions.rest()
-        except:
+        except Exception as e:
+            api._print(f"Combat error: {e}")
             stop.set()
-            exit(0)()
-            return True
+            return False
     return False
 
 def task_rotation(api, stop):
-    tasks = cycle([combat, woodcutting, mining])
+    # Rotate between tasks
+    tasks = cycle([woodcutting, mining, combat])
     current_task = next(tasks)
     
     deposit(api)
@@ -112,21 +117,33 @@ def task_rotation(api, stop):
         needs_deposit = current_task(api, stop)
         if needs_deposit:
             deposit(api)
-            current_task = next(tasks)  # Move to next task after depositing
+            current_task = next(tasks)
 
-chars = [ArtifactsAPI(token, dood) for dood in doods]
+def run_tasks():
+    chars = [wrapper.ArtifactsAPI(TOKEN, dood) for dood in doods]
 
-stop = threading.Event()
+    stop = threading.Event()
+    threads = []
 
-threads = []
-for api in chars:
-    thread = threading.Thread(target=task_rotation, args=[api, stop])
-    threads.append(thread)
+    # Start threads and listen for KeyboardInterrupt
     try:
-        thread.start()
+        for api in chars:
+            thread = threading.Thread(target=task_rotation, args=(api, stop))
+            threads.append(thread)
+            thread.start()
+        
+        # Wait for threads to finish
+        for thread in threads:
+            thread.join()
+
     except KeyboardInterrupt:
-        stop.set()
+        print("\nKeyboard interrupt detected. Stopping threads...")
+        stop.set()  # Signal all threads to stop
 
+        for thread in threads:
+            thread.join()  # Ensure all threads complete
 
-for thread in threads:
-    thread.join()
+        print("All threads stopped.")
+
+if __name__ == "__main__":
+    run_tasks()

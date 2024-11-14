@@ -2,21 +2,23 @@ import requests
 import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Union
-from datetime import datetime
 import subprocess
 import re
 import logging
 import sys
+from datetime import datetime, timedelta, timezone
+
+from threading import Lock, Timer
+from functools import wraps
 
 debug=False
 
-checked_version = False
 
 logger = logging.getLogger(__name__)
 
 # Define the logging format you want to apply
 formatter = logging.Formatter(
-    fmt="[%(levelname)s] %(asctime)s - %(message)s", 
+    fmt="[%(levelname)s] %(asctime)s - %(char)s - %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
@@ -27,52 +29,6 @@ console_handler.setFormatter(formatter)
 # Attach the handler to the parent logger (if not already present)
 if not logger.hasHandlers():
     logger.addHandler(console_handler)
-
-def _check_version():
-    try:
-        # Run the pip command and get the output as a single string
-        proc = subprocess.Popen("pip list --outdated", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        outdated_package_info, _ = proc.communicate()
-        pattern = r"artifactsmmo-wrapper\s+\(Current:\s*(.+?)\s*Latest:\s*(.+?)\)"
-        # Search across the entire output string
-        match = re.search(pattern, outdated_package_info)
-        if match:
-            return True, match.group(1), match.group(2)
-        return False, 0, 0
-    except Exception as e:
-        logger.error(f"Failed to check package version: {e}")
-        return False, 0, 0
-
-def _update_package():
-    try:
-        # Update the specific package
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "artifactsmmo-wrapper"])
-        logger.info("Package updated successfully.")
-        python = sys.executable
-        logger.info(f"Please restart the script using {[python] + sys.argv}")
-        exit(0)
-    except Exception as e:
-        logger.error(f"Failed to update package: {e}")
-        sys.exit(1)
-
-def _prompt_update(version, latest):
-    logger.warning(f"Package is outdated. (Installed: {version}, Latest: {latest})")
-    valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
-    prompt = "[Y/n]"
-    question = "Would you like to update the wrapper?"
-
-    while True:
-        choice = input(f"{question} {prompt} ").lower()
-        if choice in valid:
-            if valid[choice]:
-                logger.debug("User selected `y`. Updating package.")
-                _update_package()
-            else:
-                logger.debug("User selected `n`. Skipping package import")
-                logger.info("Please make sure to update the package when next available.")
-            break
-        else:
-            sys.stdout.write("Please respond with 'y' or 'n' (or 'yes' or 'no').\n")
 
 
 # --- Exceptions ---
@@ -159,6 +115,62 @@ class APIException(Exception):
     class MaxCharactersReached(Exception):
         pass
 # --- End Exceptions ---
+
+class CooldownManager:
+    """
+    A class to manage cooldowns for different operations using an expiration timestamp.
+    """
+    def __init__(self):
+        self.lock = Lock()
+        self.cooldown_expiration_time = None
+        self.logger = None
+
+    def is_on_cooldown(self) -> bool:
+        """Check if currently on cooldown based on expiration time."""
+        with self.lock:
+            if self.cooldown_expiration_time is None:
+                return False  # No cooldown set
+            # Check if current time is before the expiration time
+            return datetime.now(timezone.utc) < self.cooldown_expiration_time
+
+    def set_cooldown_from_expiration(self, expiration_time_str: str) -> None:
+        """Set cooldown based on an ISO 8601 expiration time string."""
+        with self.lock:
+            # Parse the expiration time string
+            self.cooldown_expiration_time = datetime.fromisoformat(expiration_time_str)
+
+    def wait_for_cooldown(self, logger=None) -> None:
+        """Wait until the cooldown expires."""
+        if self.is_on_cooldown():
+            remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
+            if logger:
+                logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": self.char.name})
+            while self.is_on_cooldown():
+                remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
+                time.sleep(min(remaining, 0.1))  # Sleep in small intervals
+
+def with_cooldown(func):
+    """
+    Decorator to apply cooldown management to a method.
+    """
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not hasattr(self, '_cooldown_manager'):
+            self._cooldown_manager = CooldownManager()
+        
+        result = func(self, *args, **kwargs)
+        
+        source = kwargs.get('source')  
+
+        if source != "get_character":
+            self._cooldown_manager.wait_for_cooldown(logger=self.logger)
+        
+            # Set cooldown after the operation
+            if hasattr(self, 'char') and hasattr(self.char, 'cooldown'):
+                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
+        
+        return result
+    return wrapper
 
 
 # --- Dataclasses ---
@@ -595,7 +607,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/move"
         json = {"x": x, "y": y}
         res = self.api._make_request("POST", endpoint, json=json, source="move")
-        self.api.wait_for_cooldown()
         return res
 
     def rest(self) -> dict:
@@ -607,7 +618,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/rest"
         res = self.api._make_request("POST", endpoint, source="rest")
-        self.api.wait_for_cooldown()
         return res
 
     # --- Item Action Functions ---
@@ -626,7 +636,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/equip"
         json = {"code": item_code, "slot": slot, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="equip_item")
-        self.api.wait_for_cooldown()
         return res
 
     def unequip_item(self, slot: str, quantity: int = 1) -> dict:
@@ -643,7 +652,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/unequip"
         json = {"slot": slot, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="unequip_item")
-        self.api.wait_for_cooldown()
         return res
 
     def use_item(self, item_code: str, quantity: int = 1) -> dict:
@@ -660,7 +668,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/use"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="use_item")
-        self.api.wait_for_cooldown()
         return res
 
     def delete_item(self, item_code: str, quantity: int = 1) -> dict:
@@ -677,7 +684,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/delete-item"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="delete_item")
-        self.api.wait_for_cooldown()
         return res
 
     # --- Resource Action Functions ---
@@ -690,7 +696,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/fight"
         res = self.api._make_request("POST", endpoint, source="fight")
-        self.api.wait_for_cooldown()
         return res
 
     def gather(self) -> dict:
@@ -702,7 +707,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/gathering"
         res = self.api._make_request("POST", endpoint, source="gather")
-        self.api.wait_for_cooldown()
         return res
 
     def craft_item(self, item_code: str, quantity: int = 1) -> dict:
@@ -719,7 +723,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/crafting"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="craft_item")
-        self.api.wait_for_cooldown()
         return res
 
     def recycle_item(self, item_code: str, quantity: int = 1) -> dict:
@@ -736,7 +739,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/recycle"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="recycle_item")
-        self.api.wait_for_cooldown()
         return res
 
     # --- Bank Action Functions ---
@@ -754,7 +756,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/bank/deposit"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_item")
-        self.api.wait_for_cooldown()
         return res
 
     def bank_deposit_gold(self, quantity: int) -> dict:
@@ -770,7 +771,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/gold"
         json = {"quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_gold")
-        self.api.wait_for_cooldown()
         return res
 
     def bank_withdraw_item(self, item_code: str, quantity: int = 1) -> dict:
@@ -787,7 +787,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_item")
-        self.api.wait_for_cooldown()
         return res
 
     def bank_withdraw_gold(self, quantity: int) -> dict:
@@ -803,7 +802,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/gold"
         json = {"quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_gold")
-        self.api.wait_for_cooldown()
         return res
 
     def bank_buy_expansion(self) -> dict:
@@ -815,7 +813,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/buy_expansion"
         res = self.api._make_request("POST", endpoint, source="bank_buy_expansion")
-        self.api.wait_for_cooldown()
         return res
 
     # --- Grand Exchange Actions Functions ---
@@ -833,7 +830,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
         json = {"id": order_id, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="ge_buy")
-        self.api.wait_for_cooldown()
         return res
 
     def ge_create_sell_order(self, item_code: str, price: int, quantity: int = 1) -> dict:
@@ -851,7 +847,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
         json = {"code": item_code, "item_code": price, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="ge_sell")
-        self.api.wait_for_cooldown()
         return res
 
     def ge_cancel_sell_order(self, order_id: str) -> dict:
@@ -867,7 +862,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
         json = {"id": order_id}
         res = self.api._make_request("POST", endpoint, json=json, source="ge_cancel_sell")
-        self.api.wait_for_cooldown()
         return res
 
     # --- Taskmaster Action Functions ---
@@ -880,7 +874,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/new"
         res = self.api._make_request("POST", endpoint, source="accept_task")
-        self.api.wait_for_cooldown()
         return res
 
     def taskmaster_complete_task(self) -> dict:
@@ -892,7 +885,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/complete"
         res = self.api._make_request("POST", endpoint, source="complete_task")
-        self.api.wait_for_cooldown()
         return res
 
     def taskmaster_exchange_task(self) -> dict:
@@ -904,7 +896,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/exchange"
         res = self.api._make_request("POST", endpoint, source="exchange_task")
-        self.api.wait_for_cooldown()
         return res
 
     def taskmaster_trade_task(self, item_code: str, quantity: int = 1) -> dict:
@@ -921,7 +912,6 @@ class Actions:
         endpoint = f"my/{self.api.char.name}/action/tasks/trade"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="trade_task")
-        self.api.wait_for_cooldown()
         return res
 
     def taskmaster_cancel_task(self) -> dict:
@@ -933,7 +923,6 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/tasks/cancel"
         res = self.api._make_request("POST", endpoint, source="cancel_task")
-        self.api.wait_for_cooldown()
         return res
  
 class Maps_Functions:
@@ -1447,23 +1436,7 @@ class Accounts:
 
 # --- Wrapper ---
 class ArtifactsAPI:
-    """
-    Wrapper class for interacting with the Artifacts MMO API.
-    
-    Attributes:
-        token (str): The API token for authenticating requests.
-        base_url (str): The base URL of the API.
-        headers (dict): The headers to include in each request.
-        character (PlayerData): The player character associated with this instance.
-    """
     def __init__(self, api_key: str, character_name: str):
-        """
-        Initialize the API wrapper with an API key and character name.
-
-        Args:
-            api_key (str): API key for authorization.
-            character_name (str): Name of the character to retrieve and interact with.
-        """
         self.token: str = api_key
         self.base_url: str = "https://api.artifactsmmo.com"
         self.headers: Dict[str, str] = {
@@ -1471,13 +1444,17 @@ class ArtifactsAPI:
             "Accept": "application/json",
             "Authorization": f'Bearer {self.token}'
         }
+        
+        # Initialize cooldown manager
+        self._cooldown_manager = CooldownManager()
+        
+        # Initialize character and logger
+        extra = {"char": character_name}
+        self.logger = logging.LoggerAdapter(logger, extra)
+        self._cooldown_manager.logger = self.logger
+        self.char = PlayerData(character_name, "", "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
+
         self.char: PlayerData = self.get_character(character_name=character_name)
-        if not checked_version:
-            _outdated, _version, _latest = _check_version()
-            logger.debug(_outdated, _version, _latest)
-            if _outdated:
-                _prompt_update(_version, _latest)
-            checked_version = True
 
         # --- Subclass definition ---
         self.account = Account(self)
@@ -1495,27 +1472,17 @@ class ArtifactsAPI:
         self.accounts = Accounts(self)
         self.content_maps = ContentMaps()
 
-    
-    def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, source: Optional[str] = None, retries: int = 3) -> dict:
+    @with_cooldown
+    def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, 
+                     source: Optional[str] = None, retries: int = 3) -> dict:
         """
         Makes an API request and returns the JSON response.
-
-        Args:
-            method (str): HTTP method (e.g., "GET", "POST").
-            endpoint (str): API endpoint to send the request to.
-            json (Optional[dict]): JSON data to include in the request body.
-            source (Optional[str]): Source of the request for conditional handling.
-
-        Returns:
-            dict: The JSON response from the API.
-        
-        Raises:
-            APIException: For various HTTP status codes with relevant error messages.
+        Now managed by cooldown decorator.
         """
         try:
             endpoint = endpoint.strip("/")
             if source != "get_character":
-                logger.debug(endpoint)
+                self.logger.debug(endpoint, extra={"char": self.char.name})
             url = f"{self.base_url}/{endpoint}"
             response = requests.request(method, url, headers=self.headers, json=json)
 
@@ -1532,21 +1499,10 @@ class ArtifactsAPI:
             return response.json()
 
         except Exception as e:
-            logger.error(e)
+            logger.error(e, extra={"char": self.char.name})
             if retries:
                 retries -= 1
-                self._make_request(method, endpoint, json, source, retries)
-
-
-    def _print(self, message: Union[str, Exception]) -> None:
-        """
-        Prints a message with a timestamp and character name.
-
-        Args:
-            message (Union[str, Exception]): The message or exception to print.
-        """
-        m = f" - {message}"
-        print(m)
+                return self._make_request(method, endpoint, json, source, retries)
 
     def _raise(self, code: int, message: str) -> None:
         """
@@ -1610,7 +1566,7 @@ class ArtifactsAPI:
             case 491:
                 raise APIException.EquipmentSlot(m)
             case 490:
-                logger.warning(m)
+                logger.warning(m, extra={"char": self.char.name})
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
         if code != 200 and code != 490:
@@ -1618,18 +1574,6 @@ class ArtifactsAPI:
 
 
     # --- Helper Functions ---
-    def wait_for_cooldown(self) -> None:
-        """
-        Wait for the character's cooldown time to expire, if applicable.
-        
-        This function prints the cooldown time remaining and pauses
-        execution until it has expired.
-        """
-        cooldown_time = self.char.cooldown
-        if cooldown_time > 0:
-            logger.debug(f"Waiting for cooldown... ({cooldown_time} seconds)")
-            time.sleep(cooldown_time)
-
     def get_character(self, data: Optional[dict] = None, character_name: Optional[str] = None) -> PlayerData:
         """
         Retrieve or update the character's data and initialize the character attribute.

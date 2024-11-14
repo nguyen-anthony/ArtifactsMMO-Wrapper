@@ -2,17 +2,13 @@ import requests
 import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Union
-import subprocess
-import re
 import logging
-import sys
 from datetime import datetime, timedelta, timezone
 
 from threading import Lock, Timer
 from functools import wraps
 
 debug=False
-
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +25,6 @@ console_handler.setFormatter(formatter)
 # Attach the handler to the parent logger (if not already present)
 if not logger.hasHandlers():
     logger.addHandler(console_handler)
-
 
 # --- Exceptions ---
 class APIException(Exception):
@@ -139,12 +134,15 @@ class CooldownManager:
             # Parse the expiration time string
             self.cooldown_expiration_time = datetime.fromisoformat(expiration_time_str)
 
-    def wait_for_cooldown(self, logger=None) -> None:
+    def wait_for_cooldown(self, logger=None, char=None) -> None:
         """Wait until the cooldown expires."""
         if self.is_on_cooldown():
             remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
             if logger:
-                logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": self.char.name})
+                if char:
+                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": char.name})
+                else:
+                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": "Unknown"})
             while self.is_on_cooldown():
                 remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
                 time.sleep(min(remaining, 0.1))  # Sleep in small intervals
@@ -158,15 +156,25 @@ def with_cooldown(func):
         if not hasattr(self, '_cooldown_manager'):
             self._cooldown_manager = CooldownManager()
         
-        result = func(self, *args, **kwargs)
+        # Before executing the action, check if the character is on cooldown
+        source = kwargs.get('source')
         
-        source = kwargs.get('source')  
-
+        # Skip cooldown for "get_character" source to allow fetching character data without waiting
         if source != "get_character":
-            self._cooldown_manager.wait_for_cooldown(logger=self.logger)
-        
-            # Set cooldown after the operation
-            if hasattr(self, 'char') and hasattr(self.char, 'cooldown'):
+            # Ensure cooldown manager is up to date with the character's cooldown expiration time
+            if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
+                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
+
+            # Wait for the cooldown to finish before calling the function
+            self._cooldown_manager.wait_for_cooldown(logger=self.logger, char=self.char)
+
+        # Now execute the function after confirming cooldown is finished
+        result = func(self, *args, **kwargs)
+
+        # Update the cooldown after the action if needed (depending on your business logic)
+        if source != "get_character":
+            # Set cooldown after the operation, if the character has a cooldown expiration
+            if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
                 self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
         
         return result
@@ -1452,7 +1460,6 @@ class ArtifactsAPI:
         extra = {"char": character_name}
         self.logger = logging.LoggerAdapter(logger, extra)
         self._cooldown_manager.logger = self.logger
-        self.char = PlayerData(character_name, "", "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [])
 
         self.char: PlayerData = self.get_character(character_name=character_name)
 

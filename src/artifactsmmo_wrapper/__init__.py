@@ -9,6 +9,17 @@ from threading import Lock, Timer
 from functools import wraps
 import math
 import re
+import coloredlogs
+
+# Define custom logging levels with colors
+level_styles = {
+    'debug': {'color': 'teal'},
+    'info': {'color': 'white'},
+    'warning': {'color': 'orange'},
+    'error': {'color': 'red'},
+    'exception': {'color': 'red'},
+    'critical': {'color': 'magenta'}
+}
 
 debug=False
 
@@ -19,6 +30,9 @@ formatter = logging.Formatter(
     fmt="\33[34m[%(levelname)s] %(asctime)s - %(char)s:\33[0m %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
 )
+
+# Apply colored logs with custom level styles
+coloredlogs.install(level_styles=level_styles, logger=logger)
 
 logger.setLevel(logging.DEBUG)
 
@@ -31,89 +45,151 @@ if not logger.hasHandlers():
     logger.addHandler(console_handler)
 
 # --- Exceptions ---
+
+# Exception class with logging
 class APIException(Exception):
     """Base exception class for API errors"""
+    
+    # Log the exception when it is raised
+    def __init__(self, message):
+        super().__init__(message)
+        logger.error(f"APIException raised: {message}")
+
     class CharacterInCooldown(Exception):
-        pass
+        def __init__(self, message="Character is in cooldown"):
+            super().__init__(message)
+            logger.warning(f"CharacterInCooldown: {message}")
 
     class NotFound(Exception):
-        pass
+        def __init__(self, message="Resource not found"):
+            super().__init__(message)
+            logger.error(f"NotFound: {message}")
 
     class ActionAlreadyInProgress(Exception):
-        pass
+        def __init__(self, message="Action is already in progress"):
+            super().__init__(message)
+            logger.warning(f"ActionAlreadyInProgress: {message}")
 
     class CharacterNotFound(Exception):
-        pass
+        def __init__(self, message="Character not found"):
+            super().__init__(message)
+            logger.error(f"CharacterNotFound: {message}")
 
     class TooLowLevel(Exception):
-        pass
+        def __init__(self, message="Level is too low"):
+            super().__init__(message)
+            logger.error(f"TooLowLevel: {message}")
 
     class InventoryFull(Exception):
-        pass
+        def __init__(self, message="Inventory is full"):
+            super().__init__(message)
+            logger.warning(f"InventoryFull: {message}")
 
     class MapItemNotFound(Exception):
-        pass
+        def __init__(self, message="Map item not found"):
+            super().__init__(message)
+            logger.error(f"MapItemNotFound: {message}")
 
     class InsufficientQuantity(Exception):
-        pass
+        def __init__(self, message="Insufficient quantity"):
+            super().__init__(message)
+            logger.warning(f"InsufficientQuantity: {message}")
 
     class GETooMany(Exception):
-        pass
+        def __init__(self, message="Too many GE items"):
+            super().__init__(message)
+            logger.error(f"GETooMany: {message}")
 
     class GENoStock(Exception):
-        pass
+        def __init__(self, message="No stock available"):
+            super().__init__(message)
+            logger.error(f"GENoStock: {message}")
 
     class GENoItem(Exception):
-        pass
+        def __init__(self, message="Item not found in GE"):
+            super().__init__(message)
+            logger.error(f"GENoItem: {message}")
 
     class TransactionInProgress(Exception):
-        pass
+        def __init__(self, message="Transaction already in progress"):
+            super().__init__(message)
+            logger.warning(f"TransactionInProgress: {message}")
 
     class InsufficientGold(Exception):
-        pass
+        def __init__(self, message="Not enough gold"):
+            super().__init__(message)
+            logger.warning(f"InsufficientGold: {message}")
 
     class TaskMasterNoTask(Exception):
-        pass
+        def __init__(self, message="No task assigned to TaskMaster"):
+            super().__init__(message)
+            logger.error(f"TaskMasterNoTask: {message}")
 
     class TaskMasterAlreadyHasTask(Exception):
-        pass
+        def __init__(self, message="TaskMaster already has a task"):
+            super().__init__(message)
+            logger.warning(f"TaskMasterAlreadyHasTask: {message}")
 
     class TaskMasterTaskNotComplete(Exception):
-        pass
+        def __init__(self, message="TaskMaster task is not complete"):
+            super().__init__(message)
+            logger.error(f"TaskMasterTaskNotComplete: {message}")
 
     class TaskMasterTaskMissing(Exception):
-        pass
+        def __init__(self, message="TaskMaster task is missing"):
+            super().__init__(message)
+            logger.error(f"TaskMasterTaskMissing: {message}")
 
     class TaskMasterTaskAlreadyCompleted(Exception):
-        pass
+        def __init__(self, message="TaskMaster task already completed"):
+            super().__init__(message)
+            logger.warning(f"TaskMasterTaskAlreadyCompleted: {message}")
 
     class RecyclingItemNotRecyclable(Exception):
-        pass
+        def __init__(self, message="Item is not recyclable"):
+            super().__init__(message)
+            logger.error(f"RecyclingItemNotRecyclable: {message}")
 
     class EquipmentTooMany(Exception):
-        pass
+        def __init__(self, message="Too many equipment items"):
+            super().__init__(message)
+            logger.warning(f"EquipmentTooMany: {message}")
 
     class EquipmentAlreadyEquipped(Exception):
-        pass
+        def __init__(self, message="Equipment already equipped"):
+            super().__init__(message)
+            logger.warning(f"EquipmentAlreadyEquipped: {message}")
 
     class EquipmentSlot(Exception):
-        pass
+        def __init__(self, message="Invalid equipment slot"):
+            super().__init__(message)
+            logger.error(f"EquipmentSlot: {message}")
 
     class AlreadyAtDestination(Exception):
-        pass
+        def __init__(self, message="Already at destination"):
+            super().__init__(message)
+            logger.info(f"AlreadyAtDestination: {message}")
 
     class BankFull(Exception):
-        pass
+        def __init__(self, message="Bank is full"):
+            super().__init__(message)
+            logger.warning(f"BankFull: {message}")
 
     class TokenMissingorEmpty(Exception):
-        pass
+        def __init__(self, message="Token is missing or empty"):
+            super().__init__(message)
+            logger.error(f"TokenMissingorEmpty: {message}")
     
     class NameAlreadyUsed(Exception):
-        pass
+        def __init__(self, message="Name already used"):
+            super().__init__(message)
+            logger.error(f"NameAlreadyUsed: {message}")
     
     class MaxCharactersReached(Exception):
-        pass
-# --- End Exceptions ---
+        def __init__(self, message="Max characters reached"):
+            super().__init__(message)
+            logger.warning(f"MaxCharactersReached: {message}")
+
 
 class CooldownManager:
     """
@@ -1726,6 +1802,11 @@ class Accounts:
 # --- Wrapper ---
 class ArtifactsAPI:
     def __init__(self, api_key: str, character_name: str):
+        extra = {"char": character_name}
+        self.logger = logging.LoggerAdapter(logger, extra)
+
+        self.logger.debug("Instantiating wrapper for " + character_name, extra = {"char": character_name})
+
         self.token: str = api_key
         self.base_url: str = "https://api.artifactsmmo.com"
         self.headers: Dict[str, str] = {
@@ -1736,12 +1817,8 @@ class ArtifactsAPI:
         
         # Initialize cooldown manager
         self._cooldown_manager = CooldownManager()
-        
-        # Initialize character and logger
-        extra = {"char": character_name}
-        self.logger = logging.LoggerAdapter(logger, extra)
         self._cooldown_manager.logger = self.logger
-
+        
         self.character_name = character_name
         self.char: PlayerData = self.get_character(character_name=character_name)
 
@@ -1761,6 +1838,8 @@ class ArtifactsAPI:
         self.accounts = Accounts(self)
         self.content_maps = ContentMaps()
 
+        self.logger.debug("Finished instantiating wrapper for " + character_name, extra = {"char": character_name})
+
     @with_cooldown
     def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, 
                      source: Optional[str] = None, retries: int = 3) -> dict:
@@ -1770,9 +1849,9 @@ class ArtifactsAPI:
         """
         try:
             endpoint = endpoint.strip("/")
-            if source != "get_character":
-                self.logger.debug(endpoint, extra={"char": self.character_name})
             url = f"{self.base_url}/{endpoint}"
+            if source != "get_character":
+                self.logger.debug(f"Sending API request to {url} with the following json:\n{json}", extra={"char": self.character_name})
             response = requests.request(method, url, headers=self.headers, json=json)
 
             if response.status_code != 200:
@@ -1783,7 +1862,10 @@ class ArtifactsAPI:
                 self._raise(response.status_code, message)
 
             if source != "get_character":
-                self.get_character()
+                if response.json()["data"].get("character", None):
+                    self.get_character(response.json()["data"].get("character"))
+                else:
+                    self.get_character()
                 
             return response.json()
 
@@ -1963,4 +2045,3 @@ class ArtifactsAPI:
             inventory=player_inventory
         )
         return self.char
-    

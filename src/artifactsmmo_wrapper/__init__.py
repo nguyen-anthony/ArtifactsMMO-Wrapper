@@ -1,25 +1,14 @@
 import requests
 import time
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Tuple, Union
+from typing import List, Dict, Optional, Tuple
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from threading import Lock, Timer
+from threading import Lock
 from functools import wraps
 import math
 import re
-import coloredlogs
-
-# Define custom logging levels with colors
-level_styles = {
-    'debug': {'color': 'teal'},
-    'info': {'color': 'white'},
-    'warning': {'color': 'orange'},
-    'error': {'color': 'red'},
-    'exception': {'color': 'red'},
-    'critical': {'color': 'magenta'}
-}
 
 debug=False
 
@@ -30,11 +19,6 @@ formatter = logging.Formatter(
     fmt="\33[34m[%(levelname)s] %(asctime)s - %(char)s:\33[0m %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
 )
-
-# Apply colored logs with custom level styles
-coloredlogs.install(level_styles=level_styles, logger=logger)
-
-logger.setLevel(logging.DEBUG)
 
 # Create a handler (e.g., StreamHandler for console output) and set its format
 console_handler = logging.StreamHandler()
@@ -1862,10 +1846,7 @@ class ArtifactsAPI:
                 self._raise(response.status_code, message)
 
             if source != "get_character":
-                if response.json()["data"].get("character", None):
-                    self.get_character(response.json()["data"].get("character"))
-                else:
-                    self.get_character()
+                self.get_character()
                 
             return response.json()
 
@@ -1873,7 +1854,9 @@ class ArtifactsAPI:
             logger.error(e, extra={"char": self.character_name})
             if retries:
                 retries -= 1
+                logger.warning(f"Retrying, {retries} retries left", extra={"char": self.character_name})
                 return self._make_request(method, endpoint, json, source, retries)
+
 
     def _raise(self, code: int, m: str) -> None:
         """
@@ -2045,3 +2028,4 @@ class ArtifactsAPI:
             inventory=player_inventory
         )
         return self.char
+    

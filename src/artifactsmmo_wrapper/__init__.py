@@ -196,7 +196,7 @@ class CooldownManager:
         """Set cooldown based on an ISO 8601 expiration time string."""
         with self.lock:
             # Parse the expiration time string
-            self.cooldown_expiration_time = datetime.fromisoformat(expiration_time_str)
+            self.cooldown_expiration_time = datetime.fromisoformat(expiration_time_str.replace("Z", "+00:00"))
 
     def wait_for_cooldown(self, logger=None, char=None) -> None:
         """Wait until the cooldown expires."""

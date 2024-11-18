@@ -162,8 +162,9 @@ class APIException(Exception):
     class TokenMissingorEmpty(Exception):
         def __init__(self, message="Token is missing or empty"):
             super().__init__(message)
-            logger.error(f"TokenMissingorEmpty: {message}")
-    
+            logger.critical(f"TokenMissingorEmpty: {message}")
+            exit(1)
+                
     class NameAlreadyUsed(Exception):
         def __init__(self, message="Name already used"):
             super().__init__(message)
@@ -1071,7 +1072,27 @@ class Items:
         logger.debug(f"Filtering complete. Total items after filtering: {len(filtered_items)}", extra={"char": self.api.char.name})
         return filtered_items
 
-    def get_item(self, params):
+    def get_item(self, item_code:str=None, craft_material:str=None, craft_skill:str=None, max_level:int=None, min_level:int=None, name:str=None, item_type:str=None):
+        params = "{"
+        if item_code:
+            params += f"\"item_code\":\"{item_code}\""
+        else:
+            if craft_material:
+                params += f"\"craft_material\":\"{craft_material}\""
+            if craft_skill:
+                params += f"\"craft_skill\":\"{craft_skill}\""
+            if max_level:
+                params += f"\"max_level\":{max_level}"
+            if min_level:
+                params += f"\"min_level\":{min_level}"
+            if name:
+                params += f"\"name\":\"{name}\""
+            if item_type:
+                params += f"\"item_type\":\"{item_type}\""
+        params += "}"
+        
+        params = None if params == "{}" else params
+                    
         logger.debug(f"Getting item with params: {params}", extra={"char": self.api.char.name})
         
         if not self.all_items:
@@ -1817,7 +1838,7 @@ class ArtifactsAPI:
         self.events = Events(self)
         self.ge = GE(self)
         self.tasks = Tasks(self)
-        self.achiecements = Achievements(self)
+        self.achievments = Achievements(self)
         self.leaderboard = Leaderboard(self)
         self.accounts = Accounts(self)
         self.content_maps = ContentMaps()
@@ -1851,11 +1872,11 @@ class ArtifactsAPI:
             return response.json()
 
         except Exception as e:
-            logger.error(e, extra={"char": self.character_name})
-            if retries:
-                retries -= 1
-                logger.warning(f"Retrying, {retries} retries left", extra={"char": self.character_name})
-                return self._make_request(method, endpoint, json, source, retries)
+            if not "Character already at destination" in str(e):
+                if retries:
+                    retries -= 1
+                    logger.warning(f"Retrying, {retries} retries left", extra={"char": self.character_name})
+                    return self._make_request(method, endpoint, json, source, retries)
 
 
     def _raise(self, code: int, m: str) -> None:

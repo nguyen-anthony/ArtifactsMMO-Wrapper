@@ -1026,88 +1026,36 @@ class Items:
         
         logger.debug(f"Finished caching {len(all_items)} items", extra={"char": self.api.char.name})
     
-    def _filter_items(self, params):
-        # Initialize the filtered list with all items
-        logger.debug(f"Filtering items with params: {params}", extra={"char": self.api.char.name})
-        
+    def _filter_items(self, craft_material=None, craft_skill=None, max_level=None, min_level=None, 
+                    name=None, item_type=None):
         filtered_items = self.all_items
         
-        or_conditions = {}
-        for key, value in params.items():
-            if key.startswith("~"):
-                key = key[1:]
-                if key not in or_conditions:
-                    or_conditions[key] = []
-                or_conditions[key].append(value)
-                logger.debug(f"OR condition for {key}: {value}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Applying filter for {key}: {value}", extra={"char": self.api.char.name})
-                
-                if key == 'craft_material':
-                    filtered_items = [item for item in filtered_items if item.get('craft') and any(material['code'] == value for material in item['craft'].get('items', []))]
-                    logger.debug(f"Filtered by craft_material: {value}. Remaining items: {len(filtered_items)}", extra={"char": self.api.char.name})
-                elif key == 'craft_skill':
-                    filtered_items = [item for item in filtered_items if item.get('craft') and item['craft']['skill'] == value]
-                    logger.debug(f"Filtered by craft_skill: {value}. Remaining items: {len(filtered_items)}", extra={"char": self.api.char.name})
-                elif key == 'max_level':
-                    filtered_items = [item for item in filtered_items if item['level'] <= value]
-                    logger.debug(f"Filtered by max_level: {value}. Remaining items: {len(filtered_items)}", extra={"char": self.api.char.name})
-                elif key == 'min_level':
-                    filtered_items = [item for item in filtered_items if item['level'] >= value]
-                    logger.debug(f"Filtered by min_level: {value}. Remaining items: {len(filtered_items)}", extra={"char": self.api.char.name})
-                elif key == 'name':
-                    name_pattern = re.compile(value, re.IGNORECASE)
-                    filtered_items = [item for item in filtered_items if name_pattern.search(item['name'])]
-                    logger.debug(f"Filtered by name: {value}. Remaining items: {len(filtered_items)}", extra={"char": self.api.char.name})
-                elif key == 'item_type':
-                    filtered_items = [item for item in filtered_items if item['type'] == value]
-                    logger.debug(f"Filtered by item_type: {value}. Remaining items: {len(filtered_items)}", extra={"char": self.api.char.name})
+        if craft_material:
+            filtered_items = [
+                item for item in filtered_items 
+                if item.get('craft') and 
+                any(material['code'] == craft_material for material in item['craft'].get('items', []))
+            ]
+        if craft_skill:
+            filtered_items = [item for item in filtered_items if item.get('craft') and item['craft']['skill'] == craft_skill]
+        if max_level is not None:
+            filtered_items = [item for item in filtered_items if item['level'] <= max_level]
+        if min_level is not None:
+            filtered_items = [item for item in filtered_items if item['level'] >= min_level]
+        if name:
+            name_pattern = re.compile(name, re.IGNORECASE)
+            filtered_items = [item for item in filtered_items if name_pattern.search(item['name'])]
+        if item_type:
+            filtered_items = [item for item in filtered_items if item['type'] == item_type]
 
-        for key, values in or_conditions.items():
-            filtered_items = [item for item in filtered_items if any(item.get(key) == v for v in values)]
-            logger.debug(f"Applied OR condition for {key} with values: {values}. Remaining items: {len(filtered_items)}", extra={"char": self.api.char.name})
-        
-        logger.debug(f"Filtering complete. Total items after filtering: {len(filtered_items)}", extra={"char": self.api.char.name})
         return filtered_items
 
-    def get_item(self, item_code:str=None, craft_material:str=None, craft_skill:str=None, max_level:int=None, min_level:int=None, name:str=None, item_type:str=None):
-        params = "{"
-        if item_code:
-            params += f"\"item_code\":\"{item_code}\""
-        else:
-            if craft_material:
-                params += f"\"craft_material\":\"{craft_material}\""
-            if craft_skill:
-                params += f"\"craft_skill\":\"{craft_skill}\""
-            if max_level:
-                params += f"\"max_level\":{max_level}"
-            if min_level:
-                params += f"\"min_level\":{min_level}"
-            if name:
-                params += f"\"name\":\"{name}\""
-            if item_type:
-                params += f"\"item_type\":\"{item_type}\""
-        params += "}"
-        
-        params = None if params == "{}" else params
-                    
-        logger.debug(f"Getting item with params: {params}", extra={"char": self.api.char.name})
-        
+    def get_item(self, item_code=None, **filters):
         if not self.all_items:
-            logger.debug("Cache is empty, calling _cache_items() to load items.", extra={"char": self.api.char.name})
             self._cache_items()
-
-        if "item_code" in params:
-            item = self.cache.get(params["item_code"])
-            if item:
-                logger.debug(f"Found item with code {params['item_code']}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Item with code {params['item_code']} not found in cache", extra={"char": self.api.char.name})
-            return item
-        
-        filtered_items = self._filter_items(params)
-        logger.debug(f"Returning {len(filtered_items)} filtered items", extra={"char": self.api.char.name})
-        return filtered_items
+        if item_code:
+            return self.cache.get(item_code)
+        return self._filter_items(**filters)
 
 class Maps:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1135,42 +1083,23 @@ class Maps:
         
         logger.debug(f"Finished caching {len(all_maps)} maps", extra={"char": self.api.char.name})
 
-    def _filter_maps(self, params):
-        logger.debug(f"Filtering maps with params: {params}", extra={"char": self.api.char.name})
-        
+    def _filter_maps(self, map_content=None, content_type=None):
         filtered_maps = self.all_maps
         
-        for key, value in params.items():
-            logger.debug(f"Applying filter for {key}: {value}", extra={"char": self.api.char.name})
-            
-            if key == 'map_content':
-                content_pattern = re.compile(value, re.IGNORECASE)
-                filtered_maps = [map_item for map_item in filtered_maps if content_pattern.search(map_item.get('content', ''))]
-            elif key == 'content_type':
-                filtered_maps = [map_item for map_item in filtered_maps if map_item.get('content_type') == value]
+        if map_content:
+            content_pattern = re.compile(map_content, re.IGNORECASE)
+            filtered_maps = [map_item for map_item in filtered_maps if content_pattern.search(map_item.get('content', ''))]
+        if content_type:
+            filtered_maps = [map_item for map_item in filtered_maps if map_item.get('content_type') == content_type]
 
-        logger.debug(f"Filtering complete. Total maps after filtering: {len(filtered_maps)}", extra={"char": self.api.char.name})
         return filtered_maps
 
-    def get_map(self, params):
-        logger.debug(f"Getting map with params: {params}", extra={"char": self.api.char.name})
-        
+    def get_map(self, x=None, y=None, **filters):
         if not self.all_maps:
-            logger.debug("Cache is empty, calling _cache_maps() to load maps.", extra={"char": self.api.char.name})
             self._cache_maps()
-
-        if "x" in params and "y" in params:
-            map_key = f"{params['x']}/{params['y']}"
-            map_item = self.cache.get(map_key)
-            if map_item:
-                logger.debug(f"Found map at coordinates {map_key}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Map at coordinates {map_key} not found in cache", extra={"char": self.api.char.name})
-            return map_item
-        
-        filtered_maps = self._filter_maps(params)
-        logger.debug(f"Returning {len(filtered_maps)} filtered maps", extra={"char": self.api.char.name})
-        return filtered_maps
+        if x is not None and y is not None:
+            return self.cache.get(f"{x}/{y}")
+        return self._filter_maps(**filters)
 
 class Monsters:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1198,48 +1127,27 @@ class Monsters:
         
         logger.debug(f"Finished caching {len(all_monsters)} monsters", extra={"char": self.api.char.name})
 
-    def _filter_monsters(self, params):
-        logger.debug(f"Filtering monsters with params: {params}", extra={"char": self.api.char.name})
-        
+    def _filter_monsters(self, drop=None, max_level=None, min_level=None):
         filtered_monsters = self.all_monsters
         
-        for key, value in params.items():
-            logger.debug(f"Applying filter for {key}: {value}", extra={"char": self.api.char.name})
-            
-            if key == 'drop':
-                filtered_monsters = [monster for monster in filtered_monsters 
-                                  if any(drop['code'] == value for drop in monster.get('drops', []))]
-            elif key == 'max_level':
-                filtered_monsters = [monster for monster in filtered_monsters if monster['level'] <= value]
-            elif key == 'min_level':
-                filtered_monsters = [monster for monster in filtered_monsters if monster['level'] >= value]
+        if drop:
+            filtered_monsters = [
+                monster for monster in filtered_monsters 
+                if any(d['code'] == drop for d in monster.get('drops', []))
+            ]
+        if max_level is not None:
+            filtered_monsters = [monster for monster in filtered_monsters if monster['level'] <= max_level]
+        if min_level is not None:
+            filtered_monsters = [monster for monster in filtered_monsters if monster['level'] >= min_level]
 
-        logger.debug(f"Filtering complete. Total monsters after filtering: {len(filtered_monsters)}", 
-                    extra={"char": self.api.char.name})
         return filtered_monsters
 
-    def get_monster(self, params):
-        logger.debug(f"Getting monster with params: {params}", extra={"char": self.api.char.name})
-        
+    def get_monster(self, monster_code=None, **filters):
         if not self.all_monsters:
-            logger.debug("Cache is empty, calling _cache_monsters() to load monsters.", 
-                        extra={"char": self.api.char.name})
             self._cache_monsters()
-
-        if "monster_code" in params:
-            monster = self.cache.get(params["monster_code"])
-            if monster:
-                logger.debug(f"Found monster with code {params['monster_code']}", 
-                            extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Monster with code {params['monster_code']} not found in cache", 
-                            extra={"char": self.api.char.name})
-            return monster
-        
-        filtered_monsters = self._filter_monsters(params)
-        logger.debug(f"Returning {len(filtered_monsters)} filtered monsters", 
-                    extra={"char": self.api.char.name})
-        return filtered_monsters
+        if monster_code:
+            return self.cache.get(monster_code)
+        return self._filter_monsters(**filters)
 
 class Resources:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1268,50 +1176,29 @@ class Resources:
         
         logger.debug(f"Finished caching {len(all_resources)} resources", extra={"char": self.api.char.name})
 
-    def _filter_resources(self, params):
-        logger.debug(f"Filtering resources with params: {params}", extra={"char": self.api.char.name})
-        
+    def _filter_resources(self, drop=None, max_level=None, min_level=None, skill=None):
         filtered_resources = self.all_resources
         
-        for key, value in params.items():
-            logger.debug(f"Applying filter for {key}: {value}", extra={"char": self.api.char.name})
-            
-            if key == 'drop':
-                filtered_resources = [resource for resource in filtered_resources 
-                                   if any(drop['code'] == value for drop in resource.get('drops', []))]
-            elif key == 'max_level':
-                filtered_resources = [resource for resource in filtered_resources if resource['level'] <= value]
-            elif key == 'min_level':
-                filtered_resources = [resource for resource in filtered_resources if resource['level'] >= value]
-            elif key == 'skill':
-                filtered_resources = [resource for resource in filtered_resources if resource.get('skill') == value]
+        if drop:
+            filtered_resources = [
+                resource for resource in filtered_resources 
+                if any(d['code'] == drop for d in resource.get('drops', []))
+            ]
+        if max_level is not None:
+            filtered_resources = [resource for resource in filtered_resources if resource['level'] <= max_level]
+        if min_level is not None:
+            filtered_resources = [resource for resource in filtered_resources if resource['level'] >= min_level]
+        if skill:
+            filtered_resources = [resource for resource in filtered_resources if resource.get('skill') == skill]
 
-        logger.debug(f"Filtering complete. Total resources after filtering: {len(filtered_resources)}", 
-                    extra={"char": self.api.char.name})
         return filtered_resources
 
-    def get_resource(self, params):
-        logger.debug(f"Getting resource with params: {params}", extra={"char": self.api.char.name})
-        
+    def get_resource(self, resource_code=None, **filters):
         if not self.all_resources:
-            logger.debug("Cache is empty, calling _cache_resources() to load resources.", 
-                        extra={"char": self.api.char.name})
             self._cache_resources()
-
-        if "resource_code" in params:
-            resource = self.cache.get(params["resource_code"])
-            if resource:
-                logger.debug(f"Found resource with code {params['resource_code']}", 
-                            extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Resource with code {params['resource_code']} not found in cache", 
-                            extra={"char": self.api.char.name})
-            return resource
-        
-        filtered_resources = self._filter_resources(params)
-        logger.debug(f"Returning {len(filtered_resources)} filtered resources", 
-                    extra={"char": self.api.char.name})
-        return filtered_resources
+        if resource_code:
+            return self.cache.get(resource_code)
+        return self._filter_resources(**filters)
 
 class Tasks:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1361,131 +1248,68 @@ class Tasks:
         
         logger.debug(f"Finished caching {len(all_rewards)} task rewards", extra={"char": self.api.char.name})
 
-    def _filter_tasks(self, params):
-        logger.debug(f"Filtering tasks with params: {params}", extra={"char": self.api.char.name})
-        
+    def _filter_tasks(self, skill=None, task_type=None, max_level=None, min_level=None, name=None):
         filtered_tasks = self.all_tasks
         
-        or_conditions = {}
-        for key, value in params.items():
-            if key.startswith("~"):
-                key = key[1:]
-                if key not in or_conditions:
-                    or_conditions[key] = []
-                or_conditions[key].append(value)
-                logger.debug(f"OR condition for {key}: {value}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Applying filter for {key}: {value}", extra={"char": self.api.char.name})
-                
-                if key == 'skill':
-                    filtered_tasks = [task for task in filtered_tasks if task.get('skill') == value]
-                elif key == 'task_type':
-                    filtered_tasks = [task for task in filtered_tasks if task.get('type') == value]
-                elif key == 'max_level':
-                    filtered_tasks = [task for task in filtered_tasks if task['level'] <= value]
-                elif key == 'min_level':
-                    filtered_tasks = [task for task in filtered_tasks if task['level'] >= value]
-                elif key == 'name':
-                    name_pattern = re.compile(value, re.IGNORECASE)
-                    filtered_tasks = [task for task in filtered_tasks if name_pattern.search(task['name'])]
+        if skill:
+            filtered_tasks = [task for task in filtered_tasks if task.get('skill') == skill]
+        if task_type:
+            filtered_tasks = [task for task in filtered_tasks if task.get('type') == task_type]
+        if max_level is not None:
+            filtered_tasks = [task for task in filtered_tasks if task['level'] <= max_level]
+        if min_level is not None:
+            filtered_tasks = [task for task in filtered_tasks if task['level'] >= min_level]
+        if name:
+            name_pattern = re.compile(name, re.IGNORECASE)
+            filtered_tasks = [task for task in filtered_tasks if name_pattern.search(task['name'])]
 
-        # Apply OR conditions
-        for key, values in or_conditions.items():
-            filtered_tasks = [task for task in filtered_tasks if any(task.get(key) == v for v in values)]
-            logger.debug(f"Applied OR condition for {key} with values: {values}. Remaining tasks: {len(filtered_tasks)}", 
-                        extra={"char": self.api.char.name})
-
-        logger.debug(f"Filtering complete. Total tasks after filtering: {len(filtered_tasks)}", 
-                    extra={"char": self.api.char.name})
         return filtered_tasks
 
-    def _filter_rewards(self, params):
-        logger.debug(f"Filtering task rewards with params: {params}", extra={"char": self.api.char.name})
-        
+    def get_task(self, task_code=None, **filters):
+        if not self.all_tasks:
+            self._cache_tasks()
+        if task_code:
+            return self.cache.get(task_code)
+        return self._filter_tasks(**filters)
+
+    # Refactored for task rewards
+    def _filter_rewards(self, name=None):
         filtered_rewards = self.all_rewards
         
-        or_conditions = {}
-        for key, value in params.items():
-            if key.startswith("~"):
-                key = key[1:]
-                if key not in or_conditions:
-                    or_conditions[key] = []
-                or_conditions[key].append(value)
-                logger.debug(f"OR condition for {key}: {value}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Applying filter for {key}: {value}", extra={"char": self.api.char.name})
-                
-                if key == 'name':
-                    name_pattern = re.compile(value, re.IGNORECASE)
-                    filtered_rewards = [reward for reward in filtered_rewards if name_pattern.search(reward['name'])]
+        if name:
+            name_pattern = re.compile(name, re.IGNORECASE)
+            filtered_rewards = [reward for reward in filtered_rewards if name_pattern.search(reward['name'])]
 
-        # Apply OR conditions
-        for key, values in or_conditions.items():
-            filtered_rewards = [reward for reward in filtered_rewards if any(reward.get(key) == v for v in values)]
-            logger.debug(f"Applied OR condition for {key} with values: {values}. Remaining rewards: {len(filtered_rewards)}", 
-                        extra={"char": self.api.char.name})
-
-        logger.debug(f"Filtering complete. Total rewards after filtering: {len(filtered_rewards)}", 
-                    extra={"char": self.api.char.name})
         return filtered_rewards
 
-    def get_task(self, params):
-        logger.debug(f"Getting task with params: {params}", extra={"char": self.api.char.name})
-        
-        if not self.all_tasks:
-            logger.debug("Cache is empty, calling _cache_tasks() to load tasks.", 
-                        extra={"char": self.api.char.name})
-            self._cache_tasks()
-
-        if "task_code" in params:
-            task = self.cache.get(params["task_code"])
-            if task:
-                logger.debug(f"Found task with code {params['task_code']}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Task with code {params['task_code']} not found in cache", 
-                            extra={"char": self.api.char.name})
-            return task
-        
-        filtered_tasks = self._filter_tasks(params)
-        logger.debug(f"Returning {len(filtered_tasks)} filtered tasks", extra={"char": self.api.char.name})
-        return filtered_tasks
-
-    def get_all_rewards(self, params=None):
-        logger.debug(f"Getting all task rewards with params: {params}", extra={"char": self.api.char.name})
+    def get_all_rewards(self, **filters):
+        logger.debug(f"Getting all task rewards with filters: {filters}", extra={"char": self.api.char.name})
         
         if not self.all_rewards:
             logger.debug("Rewards cache is empty, calling _cache_rewards() to load rewards.", 
                         extra={"char": self.api.char.name})
             self._cache_rewards()
 
-        if not params:
-            return self.all_rewards
+        return self._filter_rewards(**filters)
 
-        filtered_rewards = self._filter_rewards(params)
-        logger.debug(f"Returning {len(filtered_rewards)} filtered rewards", extra={"char": self.api.char.name})
-        return filtered_rewards
-
-    def get_reward(self, params):
-        logger.debug(f"Getting task reward with params: {params}", extra={"char": self.api.char.name})
+    def get_reward(self, task_code=None, **filters):
+        logger.debug(f"Getting task reward with filters: {filters}", extra={"char": self.api.char.name})
         
         if not self.all_rewards:
             logger.debug("Rewards cache is empty, calling _cache_rewards() to load rewards.", 
                         extra={"char": self.api.char.name})
             self._cache_rewards()
 
-        if "task_code" in params:
-            reward = self.rewards_cache.get(params["task_code"])
+        if task_code:
+            reward = self.rewards_cache.get(task_code)
             if reward:
-                logger.debug(f"Found reward with code {params['task_code']}", extra={"char": self.api.char.name})
+                logger.debug(f"Found reward with code {task_code}", extra={"char": self.api.char.name})
             else:
-                logger.debug(f"Reward with code {params['task_code']} not found in cache", 
-                            extra={"char": self.api.char.name})
+                logger.debug(f"Reward with code {task_code} not found in cache", extra={"char": self.api.char.name})
             return reward
         
-        filtered_rewards = self._filter_rewards(params)
-        logger.debug(f"Returning {len(filtered_rewards)} filtered rewards", extra={"char": self.api.char.name})
-        return filtered_rewards
-    
+        return self._filter_rewards(**filters)
+
 class Achievements:
     def __init__(self, api: "ArtifactsAPI"):
         self.api = api
@@ -1514,82 +1338,51 @@ class Achievements:
         logger.debug(f"Finished caching {len(all_achievements)} achievements", 
                     extra={"char": self.api.char.name})
 
-    def _filter_achievements(self, params):
-        logger.debug(f"Filtering achievements with params: {params}", extra={"char": self.api.char.name})
-        
+    def _filter_achievements(self, achievement_type=None, name=None, description=None, reward_type=None, 
+                            reward_item=None, points_min=None, points_max=None):
         filtered_achievements = self.all_achievements
         
-        or_conditions = {}
-        for key, value in params.items():
-            if key.startswith("~"):
-                key = key[1:]
-                if key not in or_conditions:
-                    or_conditions[key] = []
-                or_conditions[key].append(value)
-                logger.debug(f"OR condition for {key}: {value}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Applying filter for {key}: {value}", extra={"char": self.api.char.name})
-                
-                if key == 'achievement_type':
-                    filtered_achievements = [achievement for achievement in filtered_achievements 
-                                          if achievement.get('type') == value]
-                elif key == 'name':
-                    name_pattern = re.compile(value, re.IGNORECASE)
-                    filtered_achievements = [achievement for achievement in filtered_achievements 
-                                          if name_pattern.search(achievement['name'])]
-                elif key == 'description':
-                    desc_pattern = re.compile(value, re.IGNORECASE)
-                    filtered_achievements = [achievement for achievement in filtered_achievements 
-                                          if desc_pattern.search(achievement.get('description', ''))]
-                elif key == 'reward_type':
-                    filtered_achievements = [achievement for achievement in filtered_achievements 
-                                          if any(reward.get('type') == value 
-                                                for reward in achievement.get('rewards', []))]
-                elif key == 'reward_item':
-                    filtered_achievements = [achievement for achievement in filtered_achievements 
-                                          if any(reward.get('code') == value 
-                                                for reward in achievement.get('rewards', []))]
-                elif key == 'points_min':
-                    filtered_achievements = [achievement for achievement in filtered_achievements 
-                                          if achievement.get('points', 0) >= value]
-                elif key == 'points_max':
-                    filtered_achievements = [achievement for achievement in filtered_achievements 
-                                          if achievement.get('points', 0) <= value]
+        if achievement_type:
+            filtered_achievements = [
+                achievement for achievement in filtered_achievements 
+                if achievement.get('type') == achievement_type
+            ]
+        if name:
+            name_pattern = re.compile(name, re.IGNORECASE)
+            filtered_achievements = [
+                achievement for achievement in filtered_achievements 
+                if name_pattern.search(achievement['name'])
+            ]
+        if description:
+            desc_pattern = re.compile(description, re.IGNORECASE)
+            filtered_achievements = [
+                achievement for achievement in filtered_achievements 
+                if desc_pattern.search(achievement.get('description', ''))
+            ]
+        if reward_type:
+            filtered_achievements = [
+                achievement for achievement in filtered_achievements 
+                if any(reward.get('type') == reward_type for reward in achievement.get('rewards', []))
+            ]
+        if reward_item:
+            filtered_achievements = [
+                achievement for achievement in filtered_achievements 
+                if any(reward.get('code') == reward_item for reward in achievement.get('rewards', []))
+            ]
+        if points_min is not None:
+            filtered_achievements = [achievement for achievement in filtered_achievements if achievement.get('points', 0) >= points_min]
+        if points_max is not None:
+            filtered_achievements = [achievement for achievement in filtered_achievements if achievement.get('points', 0) <= points_max]
 
-        # Apply OR conditions
-        for key, values in or_conditions.items():
-            filtered_achievements = [achievement for achievement in filtered_achievements 
-                                  if any(achievement.get(key) == v for v in values)]
-            logger.debug(f"Applied OR condition for {key} with values: {values}. " + 
-                        f"Remaining achievements: {len(filtered_achievements)}", 
-                        extra={"char": self.api.char.name})
-
-        logger.debug(f"Filtering complete. Total achievements after filtering: {len(filtered_achievements)}", 
-                    extra={"char": self.api.char.name})
         return filtered_achievements
 
-    def get_achievement(self, params):
-        logger.debug(f"Getting achievement with params: {params}", extra={"char": self.api.char.name})
-        
+    def get_achievement(self, achievement_code=None, **filters):
         if not self.all_achievements:
-            logger.debug("Cache is empty, calling _cache_achievements() to load achievements.", 
-                        extra={"char": self.api.char.name})
             self._cache_achievements()
+        if achievement_code:
+            return self.cache.get(achievement_code)
+        return self._filter_achievements(**filters)
 
-        if "achievement_code" in params:
-            achievement = self.cache.get(params["achievement_code"])
-            if achievement:
-                logger.debug(f"Found achievement with code {params['achievement_code']}", 
-                            extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Achievement with code {params['achievement_code']} not found in cache", 
-                            extra={"char": self.api.char.name})
-            return achievement
-        
-        filtered_achievements = self._filter_achievements(params)
-        logger.debug(f"Returning {len(filtered_achievements)} filtered achievements", 
-                    extra={"char": self.api.char.name})
-        return filtered_achievements
 
     def get_all(self, params=None):
         """

@@ -944,7 +944,7 @@ class Actions:
         Returns:
             dict: Response data confirming task acceptance.
         """
-        endpoint = f"my/{self.api.char.name}/action/tasks/new"
+        endpoint = f"my/{self.api.char.name}/action/task/new"
         res = self.api._make_request("POST", endpoint, source="accept_task")
         return res
 
@@ -955,7 +955,7 @@ class Actions:
         Returns:
             dict: Response data confirming task completion.
         """
-        endpoint = f"my/{self.api.char.name}/action/tasks/complete"
+        endpoint = f"my/{self.api.char.name}/action/task/complete"
         res = self.api._make_request("POST", endpoint, source="complete_task")
         return res
 
@@ -966,7 +966,7 @@ class Actions:
         Returns:
             dict: Response data confirming task exchange.
         """
-        endpoint = f"my/{self.api.char.name}/action/tasks/exchange"
+        endpoint = f"my/{self.api.char.name}/action/task/exchange"
         res = self.api._make_request("POST", endpoint, source="exchange_task")
         return res
 
@@ -981,7 +981,7 @@ class Actions:
         Returns:
             dict: Response data confirming task trade.
         """
-        endpoint = f"my/{self.api.char.name}/action/tasks/trade"
+        endpoint = f"my/{self.api.char.name}/action/task/trade"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="trade_task")
         return res
@@ -993,7 +993,7 @@ class Actions:
         Returns:
             dict: Response data confirming task cancellation.
         """
-        endpoint = f"my/{self.api.char.name}/action/tasks/cancel"
+        endpoint = f"my/{self.api.char.name}/action/task/cancel"
         res = self.api._make_request("POST", endpoint, source="cancel_task")
         return res
  
@@ -1267,7 +1267,7 @@ class Tasks:
         self.all_rewards = []
 
     def _cache_tasks(self):
-        endpoint = "tasks/list?size=1"
+        endpoint = "task/list?size=1"
         res = self.api._make_request("GET", endpoint, source="get_all_tasks")
         pages = math.ceil(int(res["pages"]) / 100)
         
@@ -1275,7 +1275,7 @@ class Tasks:
         
         all_tasks = []
         for i in range(pages):
-            endpoint = f"tasks/list?size=100&page={i+1}"
+            endpoint = f"task/list?size=100&page={i+1}"
             res = self.api._make_request("GET", endpoint, source="get_all_tasks")
             task_list = res["data"]
             all_tasks.extend(task_list)
@@ -1287,7 +1287,7 @@ class Tasks:
         logger.debug(f"Finished caching {len(all_tasks)} tasks", extra={"char": self.api.char.name})
 
     def _cache_rewards(self):
-        endpoint = "tasks/rewards?size=1"
+        endpoint = "task/rewards?size=1"
         res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
         pages = math.ceil(int(res["pages"]) / 100)
         
@@ -1295,7 +1295,7 @@ class Tasks:
         
         all_rewards = []
         for i in range(pages):
-            endpoint = f"tasks/rewards?size=100&page={i+1}"
+            endpoint = f"task/rewards?size=100&page={i+1}"
             res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
             reward_list = res["data"]
             all_rewards.extend(reward_list)

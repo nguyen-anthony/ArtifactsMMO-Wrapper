@@ -1051,6 +1051,24 @@ class Items:
         return filtered_items
 
     def get_item(self, item_code=None, **filters):
+        """
+        Get a specific item by its code or filter items based on the provided parameters.
+
+        Args:
+            item_code (str, optional): The code of a specific item to retrieve.
+            filters (dict, optional): A dictionary of filter parameters. Supported filters:
+                - craft_material (str): Filter by the code of the craft material used by the item.
+                - craft_skill (str): Filter by the craft skill required for the item.
+                - max_level (int): Filter items with a level less than or equal to the specified value.
+                - min_level (int): Filter items with a level greater than or equal to the specified value.
+                - name (str): Search for items whose names match the given pattern (case-insensitive).
+                - item_type (str): Filter by item type (e.g., 'weapon', 'armor', etc.).
+
+        Returns:
+            dict or list: Returns a single item if `item_code` is provided, or a list of items
+            matching the filter criteria if `filters` are provided.
+        """
+
         if not self.all_items:
             self._cache_items()
         if item_code:
@@ -1095,6 +1113,19 @@ class Maps:
         return filtered_maps
 
     def get_map(self, x=None, y=None, **filters):
+        """
+        Retrieves a specific map by coordinates or filters maps based on provided parameters.
+        
+        Args:
+            x (int, optional): Map's X coordinate.
+            y (int, optional): Map's Y coordinate.
+            **filters: Optional filter parameters. Supported filters:
+                - map_content: Search maps by content (case-insensitive).
+                - content_type: Filter maps by content type.
+
+        Returns:
+            dict or list: A specific map if coordinates are provided, else a filtered list of maps.
+        """
         if not self.all_maps:
             self._cache_maps()
         if x is not None and y is not None:
@@ -1143,6 +1174,19 @@ class Monsters:
         return filtered_monsters
 
     def get_monster(self, monster_code=None, **filters):
+        """
+        Retrieves a specific monster or filters monsters based on provided parameters.
+        
+        Args:
+            monster_code (str, optional): Retrieve monster by its unique code.
+            **filters: Optional filter parameters. Supported filters:
+                - drop: Filter monsters that drop a specific item.
+                - max_level: Filter by maximum monster level.
+                - min_level: Filter by minimum monster level.
+
+        Returns:
+            dict or list: A single monster if monster_code is provided, else a filtered list of monsters.
+        """
         if not self.all_monsters:
             self._cache_monsters()
         if monster_code:
@@ -1194,6 +1238,20 @@ class Resources:
         return filtered_resources
 
     def get_resource(self, resource_code=None, **filters):
+        """
+        Retrieves a specific resource or filters resources based on provided parameters.
+        
+        Args:
+            resource_code (str, optional): Retrieve resource by its unique code.
+            **filters: Optional filter parameters. Supported filters:
+                - drop: Filter resources that drop a specific item.
+                - max_level: Filter by maximum resource level.
+                - min_level: Filter by minimum resource level.
+                - skill: Filter by craft skill.
+
+        Returns:
+            dict or list: A single resource if resource_code is provided, else a filtered list of resources.
+        """
         if not self.all_resources:
             self._cache_resources()
         if resource_code:
@@ -1266,6 +1324,21 @@ class Tasks:
         return filtered_tasks
 
     def get_task(self, task_code=None, **filters):
+        """
+        Retrieves a specific task or filters tasks based on provided parameters.
+        
+        Args:
+            task_code (str, optional): Retrieve task by its unique code.
+            **filters: Optional filter parameters. Supported filters:
+                - skill: Filter by task skill.
+                - task_type: Filter by task type.
+                - max_level: Filter by maximum task level.
+                - min_level: Filter by minimum task level.
+                - name: Filter by task name (case-insensitive).
+
+        Returns:
+            dict or list: A single task if task_code is provided, else a filtered list of tasks.
+        """
         if not self.all_tasks:
             self._cache_tasks()
         if task_code:
@@ -1293,6 +1366,17 @@ class Tasks:
         return self._filter_rewards(**filters)
 
     def get_reward(self, task_code=None, **filters):
+        """
+        Retrieves a specific reward or filters rewards based on provided parameters.
+        
+        Args:
+            reward_code (str, optional): Retrieve reward by its unique code.
+            **filters: Optional filter parameters. Supported filters:
+                - name: Filter by reward name (case-insensitive).
+
+        Returns:
+            dict or list: A single reward if reward_code is provided, else a filtered list of rewards.
+        """
         logger.debug(f"Getting task reward with filters: {filters}", extra={"char": self.api.char.name})
         
         if not self.all_rewards:
@@ -1377,38 +1461,29 @@ class Achievements:
         return filtered_achievements
 
     def get_achievement(self, achievement_code=None, **filters):
+        """
+        Retrieves a specific achievement or filters achievements based on provided parameters.
+        
+        Args:
+            achievement_code (str, optional): Retrieve achievement by its unique code.
+            **filters: Optional filter parameters. Supported filters:
+                - achievement_type: Filter by achievement type.
+                - name: Filter by achievement name (case-insensitive).
+                - description: Filter by achievement description (case-insensitive).
+                - reward_type: Filter by reward type.
+                - reward_item: Filter by reward item code.
+                - points_min: Filter by minimum achievement points.
+                - points_max: Filter by maximum achievement points.
+
+        Returns:
+            dict or list: A single achievement if achievement_code is provided, else a filtered list of achievements.
+        """
         if not self.all_achievements:
             self._cache_achievements()
         if achievement_code:
             return self.cache.get(achievement_code)
         return self._filter_achievements(**filters)
 
-
-    def get_all(self, params=None):
-        """
-        Get all achievements with optional filtering.
-        
-        Args:
-            params (dict, optional): Dictionary of filter parameters. Supported filters:
-                - achievement_type: Filter by achievement type
-                - name: Search achievement names (case-insensitive)
-                - description: Search achievement descriptions (case-insensitive)
-                - reward_type: Filter by type of reward
-                - reward_item: Filter by specific reward item code
-                - points_min: Filter by minimum points
-                - points_max: Filter by maximum points
-                Use '~' prefix for OR conditions (e.g. ~type: ['daily', 'weekly'])
-        
-        Returns:
-            list: List of filtered achievements
-        """
-        if not self.all_achievements:
-            self._cache_achievements()
-            
-        if not params:
-            return self.all_achievements
-            
-        return self._filter_achievements(params)
     
 class Events:
     def __init__(self, api: "ArtifactsAPI"):

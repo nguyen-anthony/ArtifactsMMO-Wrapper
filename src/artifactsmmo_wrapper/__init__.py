@@ -10,8 +10,6 @@ from functools import wraps
 import math
 import re
 
-debug=False
-
 logger = logging.getLogger(__name__)
 
 # Define the logging format you want to apply
@@ -19,6 +17,7 @@ formatter = logging.Formatter(
     fmt="\33[34m[%(levelname)s] %(asctime)s - %(char)s:\33[0m %(message)s", 
     datefmt="%Y-%m-%d %H:%M:%S"
 )
+
 
 # Create a handler (e.g., StreamHandler for console output) and set its format
 console_handler = logging.StreamHandler()
@@ -246,6 +245,7 @@ def with_cooldown(func):
 
 
 # --- Dataclasses ---
+# --- Utility ---
 @dataclass
 class Position:
     """Represents a position on a 2D grid."""
@@ -272,7 +272,6 @@ class Position:
         yield self.x
         yield self.y
 
-
 @dataclass
 class Drop:
     code: str
@@ -296,62 +295,227 @@ class ContentMap:
     def __repr__(self) -> str:
         return f"{self.name} ({self.code}) at {self.pos}\n  Requires {self.skill} level {self.level}"
     
+@dataclass
+class Content:
+    type: str
+    code: str
+
+@dataclass
+class TaskReward:
+    items: Optional[List[dict]]
+    gold: Optional[int]
+
+@dataclass
+class Effect:
+    name: str
+    value: int
+
+@dataclass
+class CraftingRecipe:
+    skill: Optional[str]
+    level: Optional[int]
+    items: Optional[List[dict]]  # Example: [{'code': 'iron', 'quantity': 6}]
+    quantity: Optional[int]
+
+@dataclass
+class AchievementReward:
+    gold: int
+
+# --- subclass related ---
+@dataclass
+class Item:
+    name: str
+    code: str
+    level: int
+    type: str
+    subtype: Optional[str]
+    description: Optional[str]
+    effects: Optional[List[Effect]] = None
+    craft: Optional[CraftingRecipe] = None
+    tradeable: Optional[bool] = False
+
+@dataclass
+class Map:
+    name: str
+    code: str
+    x: int
+    y: int
+    content: Content
+
+@dataclass
+class Monster:
+    name: str
+    code: str
+    level: int
+    hp: int
+    attack_fire: int
+    attack_earth: int
+    attack_water: int
+    attack_air: int
+    res_fire: int
+    res_earth: int
+    res_water: int
+    res_air: int
+    min_gold: int
+    max_gold: int
+    drops: List[Drop]
+
+@dataclass
+class Resource:
+    name: str
+    code: str
+    skill: Optional[str]
+    level: int
+    drops: List[Drop]
+
+@dataclass
+class Task:
+    code: str
+    level: int
+    type: Optional[str]
+    min_quantity: int
+    max_quantity: int
+    skill: Optional[str]
+    rewards: Optional[TaskReward]
+
+@dataclass
+class Reward:
+    code: str
+    rate: int
+    min_quantity: int
+    max_quantity: int
+
+@dataclass
+class Achievement:
+    name: str
+    code: str
+    description: str
+    points: int
+    type: str
+    target: str
+    total: int
+    rewards: AchievementReward
+
+# --- Other ---
 
 @dataclass
 class ContentMaps:
-    salmon_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Salmon Fishing Spot", code="salmon_fishing_spot", level=40, skill="fishing", pos=Position(-2, -4), drops=[Drop(code="salmon", rate=1, min_quantity=1, max_quantity=1), Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)]))
-    goblin_wolfrider: ContentMap = field(default_factory=lambda: ContentMap(name="Goblin Wolfrider", code="goblin_wolfrider", level=40, skill="combat", pos=Position(6, -4), drops=[Drop(code="broken_sword", rate=24, min_quantity=1, max_quantity=1), Drop(code="wolfrider_hair", rate=12, min_quantity=1, max_quantity=1)]))
-    orc: ContentMap = field(default_factory=lambda: ContentMap(name="Orc", code="orc", level=38, skill="combat", pos=Position(7, -2), drops=[Drop(code="orc_skin", rate=12, min_quantity=1, max_quantity=1)]))
-    ogre: ContentMap = field(default_factory=lambda: ContentMap(name="Ogre", code="ogre", level=20, skill="combat", pos=Position(8, -2), drops=[Drop(code="ogre_eye", rate=12, min_quantity=1, max_quantity=1), Drop(code="ogre_skin", rate=12, min_quantity=1, max_quantity=1), Drop(code="wooden_club", rate=100, min_quantity=1, max_quantity=1)]))
-    pig: ContentMap = field(default_factory=lambda: ContentMap(name="Pig", code="pig", level=19, skill="combat", pos=Position(-3, -3), drops=[Drop(code="pig_skin", rate=12, min_quantity=1, max_quantity=1)]))
-    woodcutting_workshop: ContentMap = field(default_factory=lambda: ContentMap(name="Woodcutting", code="woodcutting", level=1, skill=None, pos=Position(-2, -3), drops=[]))
-    gold_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Gold Rocks", code="gold_rocks", level=30, skill="mining", pos=Position(6, -3), drops=[Drop(code="gold_ore", rate=1, min_quantity=1, max_quantity=1), Drop(code="topaz_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="topaz", rate=5000, min_quantity=1, max_quantity=1), Drop(code="emerald", rate=5000, min_quantity=1, max_quantity=1), Drop(code="emerald_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="ruby", rate=5000, min_quantity=1, max_quantity=1), Drop(code="ruby_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="sapphire", rate=5000, min_quantity=1, max_quantity=1), Drop(code="sapphire_stone", rate=600, min_quantity=1, max_quantity=1)]))
-    cyclops: ContentMap = field(default_factory=lambda: ContentMap(name="Cyclops", code="cyclops", level=25, skill="combat", pos=Position(7, -3), drops=[Drop(code="cyclops_eye", rate=12, min_quantity=1, max_quantity=1)]))
-    blue_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Blue Slime", code="blue_slime", level=6, skill="combat", pos=Position(0, -2), drops=[Drop(code="blue_slimeball", rate=12, min_quantity=1, max_quantity=1), Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)]))
-    yellow_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Yellow Slime", code="yellow_slime", level=2, skill="combat", pos=Position(1, -2), drops=[Drop(code="yellow_slimeball", rate=12, min_quantity=1, max_quantity=1), Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)]))
-    red_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Red Slime", code="red_slime", level=7, skill="combat", pos=Position(1, -1), drops=[Drop(code="red_slimeball", rate=12, min_quantity=1, max_quantity=1), Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)]))
-    green_slime: ContentMap = field(default_factory=lambda: ContentMap(name="Green Slime", code="green_slime", level=4, skill="combat", pos=Position(0, -1), drops=[Drop(code="green_slimeball", rate=12, min_quantity=1, max_quantity=1), Drop(code="apple", rate=20, min_quantity=1, max_quantity=1)]))
-    goblin: ContentMap = field(default_factory=lambda: ContentMap(name="Goblin", code="goblin", level=35, skill="combat", pos=Position(6, -2), drops=[Drop(code="goblin_tooth", rate=12, min_quantity=1, max_quantity=1), Drop(code="goblin_eye", rate=12, min_quantity=1, max_quantity=1)]))
-    wolf: ContentMap = field(default_factory=lambda: ContentMap(name="Wolf", code="wolf", level=15, skill="combat", pos=Position(-2, 1), drops=[Drop(code="raw_wolf_meat", rate=10, min_quantity=1, max_quantity=1), Drop(code="wolf_bone", rate=12, min_quantity=1, max_quantity=1), Drop(code="wolf_hair", rate=12, min_quantity=1, max_quantity=1)]))
-    ash_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Ash Tree", code="ash_tree", level=1, skill="woodcutting", pos=Position(-1, 0), drops=[Drop(code="ash_wood", rate=1, min_quantity=1, max_quantity=1), Drop(code="sap", rate=10, min_quantity=1, max_quantity=1)]))
-    copper_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Copper Rocks", code="copper_rocks", level=1, skill="mining", pos=Position(2, 0), drops=[Drop(code="copper_ore", rate=1, min_quantity=1, max_quantity=1), Drop(code="topaz_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="topaz", rate=5000, min_quantity=1, max_quantity=1), Drop(code="emerald", rate=5000, min_quantity=1, max_quantity=1), Drop(code="emerald_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="ruby", rate=5000, min_quantity=1, max_quantity=1), Drop(code="ruby_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="sapphire", rate=5000, min_quantity=1, max_quantity=1), Drop(code="sapphire_stone", rate=600, min_quantity=1, max_quantity=1)]))
-    chicken: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="chicken", level=1, skill="combat", pos=Position(0, 1), drops=[Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1), Drop(code="egg", rate=12, min_quantity=1, max_quantity=1), Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)]))
-    cooking_workshop: ContentMap = field(default_factory=lambda: ContentMap(name="Cooking", code="cooking", level=1, skill=None, pos=Position(1, 1), drops=[]))
-    weaponcrafting_workshop: ContentMap = field(default_factory=lambda: ContentMap(name="Weaponcrafting", code="weaponcrafting", level=1, skill=None, pos=Position(2, 1), drops=[]))
-    gearcrafting_workshop: ContentMap = field(default_factory=lambda: ContentMap(name="Gearcrafting", code="gearcrafting", level=1, skill=None, pos=Position(3, 1), drops=[]))
-    bank: ContentMap = field(default_factory=lambda: ContentMap(name="Bank", code="bank", level=1, skill=None, pos=Position(4, 1), drops=[Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1), Drop(code="egg", rate=12, min_quantity=1, max_quantity=1), Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)]))
-    grand_exchange: ContentMap = field(default_factory=lambda: ContentMap(name="Chicken", code="grand_exchange", level=1, skill="combat", pos=Position(5, 1), drops=[Drop(code="raw_chicken", rate=10, min_quantity=1, max_quantity=1), Drop(code="egg", rate=12, min_quantity=1, max_quantity=1), Drop(code="feather", rate=8, min_quantity=1, max_quantity=1)]))
-    owlbear: ContentMap = field(default_factory=lambda: ContentMap(name="Owlbear", code="owlbear", level=30, skill="combat", pos=Position(10, 1), drops=[Drop(code="owlbear_hair", rate=12, min_quantity=1, max_quantity=1)]))      
-    cow: ContentMap = field(default_factory=lambda: ContentMap(name="Cow", code="cow", level=8, skill="combat", pos=Position(0, 2), drops=[Drop(code="raw_beef", rate=10, min_quantity=1, max_quantity=1), Drop(code="milk_bucket", rate=12, min_quantity=1, max_quantity=1), Drop(code="cowhide", rate=8, min_quantity=1, max_quantity=1)]))
-    taskmaster_monsters: ContentMap = field(default_factory=lambda: ContentMap(name="Taskmaster of Monsters", code="monsters", level=8, skill="combat", pos=Position(1, 2), drops=[]))
-    sunflower: ContentMap = field(default_factory=lambda: ContentMap(name="Sunflower", code="sunflower", level=1, skill="alchemy", pos=Position(2, 2), drops=[Drop(code="sunflower", rate=1, min_quantity=1, max_quantity=1)]))     
-    gudgeon_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Gudgeon Fishing Spot", code="gudgeon_fishing_spot", level=1, skill="fishing", pos=Position(4, 2), drops=[Drop(code="gudgeon", rate=1, min_quantity=1, max_quantity=1), Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)]))
-    shrimp_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Shrimp Fishing Spot", code="shrimp_fishing_spot", level=10, skill="fishing", pos=Position(5, 2), drops=[Drop(code="shrimp", rate=1, min_quantity=1, max_quantity=1), Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)]))
-    jewelrycrafting_workshop: ContentMap = field(default_factory=lambda: ContentMap(name="Jewelrycrafting", code="jewelrycrafting", level=1, skill=None, pos=Position(1, 3), drops=[]))
-    alchemy_workshop: ContentMap = field(default_factory=lambda: ContentMap(name="Alchemy", code="alchemy", level=1, skill=None, pos=Position(2, 3), drops=[]))       
-    mushmush: ContentMap = field(default_factory=lambda: ContentMap(name="Mushmush", code="mushmush", level=10, skill="combat", pos=Position(5, 3), drops=[Drop(code="mushroom", rate=12, min_quantity=1, max_quantity=1), Drop(code="forest_ring", rate=100, min_quantity=1, max_quantity=1)]))
-    flying_serpent: ContentMap = field(default_factory=lambda: ContentMap(name="Flying Serpent", code="flying_serpent", level=12, skill="combat", pos=Position(5, 4), drops=[Drop(code="flying_wing", rate=12, min_quantity=1, max_quantity=1), Drop(code="serpent_skin", rate=12, min_quantity=1, max_quantity=1), Drop(code="forest_ring", rate=100, min_quantity=1, max_quantity=1)]))
-    mining_workshop: ContentMap = field(default_factory=lambda: ContentMap(name="Mining", code="mining", level=1, skill=None, pos=Position(1, 5), drops=[]))
-    birch_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Birch Tree", code="birch_tree", level=20, skill=None, pos=Position(3, 5), drops=[Drop(code="birch_wood", rate=1, min_quantity=1, max_quantity=1), Drop(code="sap", rate=10, min_quantity=1, max_quantity=1)]))
-    coal_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Coal Rocks", code="coal_rocks", level=20, skill="mining", pos=Position(1, 6), drops=[Drop(code="coal", rate=1, min_quantity=1, max_quantity=1), Drop(code="topaz_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="topaz", rate=5000, min_quantity=1, max_quantity=1), Drop(code="emerald", rate=5000, min_quantity=1, max_quantity=1), Drop(code="emerald_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="ruby", rate=5000, min_quantity=1, max_quantity=1), Drop(code="ruby_stone", rate=600, min_quantity=1, max_quantity=1), Drop(code="sapphire", rate=5000, min_quantity=1, max_quantity=1), Drop(code="sapphire_stone", rate=600, min_quantity=1, max_quantity=1)]))
-    spruce_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Spruce Tree", code="spruce_tree", level=10, skill="woodcutting", pos=Position(2, 6), drops=[Drop(code="spruce_wood", rate=1, min_quantity=1, max_quantity=1), Drop(code="sap", rate=10, min_quantity=1, max_quantity=1), Drop(code="apple", rate=10, min_quantity=1, max_quantity=1)]))
-    skeleton: ContentMap = field(default_factory=lambda: ContentMap(name="Skeleton", code="skeleton", level=18, skill="combat", pos=Position(8, 6), drops=[Drop(code="skeleton_bone", rate=12, min_quantity=1, max_quantity=1), Drop(code="skeleton_skull", rate=16, min_quantity=1, max_quantity=1)]))
-    dead_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Dead Tree", code="dead_tree", level=30, skill="woodcutting", pos=Position(9, 6), drops=[Drop(code="dead_wood", rate=1, min_quantity=1, max_quantity=1), Drop(code="sap", rate=10, min_quantity=1, max_quantity=1)]))
-    vampire: ContentMap = field(default_factory=lambda: ContentMap(name="Vampire", code="vampire", level=24, skill="combat", pos=Position(10, 6), drops=[Drop(code="vampire_blood", rate=12, min_quantity=1, max_quantity=1)]))     
-    iron_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Iron Rocks", code="iron_rocks", level=10, skill="mining", pos=Position(1, 7), drops=[Drop(code="iron_ore", rate=1, min_quantity=1, max_quantity=1), Drop(code="topaz_stone", rate=500, min_quantity=1, max_quantity=1), Drop(code="topaz", rate=4000, min_quantity=1, max_quantity=1), Drop(code="emerald", rate=4000, min_quantity=1, max_quantity=1), Drop(code="emerald_stone", rate=500, min_quantity=1, max_quantity=1), Drop(code="ruby", rate=4000, min_quantity=1, max_quantity=1), Drop(code="ruby_stone", rate=500, min_quantity=1, max_quantity=1), Drop(code="sapphire", rate=4000, min_quantity=1, max_quantity=1), Drop(code="sapphire_stone", rate=500, min_quantity=1, max_quantity=1)]))
-    death_knight: ContentMap = field(default_factory=lambda: ContentMap(name="Death Knight", code="death_knight", level=28, skill="combat", pos=Position(8, 7), drops=[Drop(code="death_knight_sword", rate=600, min_quantity=1, max_quantity=1), Drop(code="red_cloth", rate=12, min_quantity=1, max_quantity=1)]))
-    lich: ContentMap = field(default_factory=lambda: ContentMap(name="Lich", code="lich", level=30, skill="combat", pos=Position(9, 7), drops=[Drop(code="life_crystal", rate=2000, min_quantity=1, max_quantity=1), Drop(code="lich_crown", rate=600, min_quantity=1, max_quantity=1)]))
-    bat: ContentMap = field(default_factory=lambda: ContentMap(name="Bat", code="bat", level=38, skill="combat", pos=Position(8, 9), drops=[Drop(code="bat_wing", rate=12, min_quantity=1, max_quantity=1)]))
-    glowstem: ContentMap = field(default_factory=lambda: ContentMap(name="Glowstem", code="glowstem", level=40, skill="alchemy", pos=Position(1, 10), drops=[Drop(code="glowstem_leaf", rate=1, min_quantity=1, max_quantity=1)]))  
-    imp: ContentMap = field(default_factory=lambda: ContentMap(name="Imp", code="imp", level=28, skill="combat", pos=Position(0, 12), drops=[Drop(code="demoniac_dust", rate=12, min_quantity=1, max_quantity=1), Drop(code="piece_of_obsidian", rate=70, min_quantity=1, max_quantity=1)]))
-    maple_tree: ContentMap = field(default_factory=lambda: ContentMap(name="Maple Tree", code="maple_tree", level=40, skill="woodcutting", pos=Position(1, 12), drops=[Drop(code="maple_wood", rate=1, min_quantity=1, max_quantity=1), Drop(code="maple_sap", rate=10, min_quantity=1, max_quantity=1)]))
-    bass_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Bass Fishing Spot", code="bass_fishing_spot", level=30, skill="fishing", pos=Position(6, 12), drops=[Drop(code="bass", rate=1, min_quantity=1, max_quantity=1), Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)]))
-    trout_fishing_spot: ContentMap = field(default_factory=lambda: ContentMap(name="Trout Fishing Spot", code="trout_fishing_spot", level=20, skill="fishing", pos=Position(7, 12), drops=[Drop(code="trout", rate=1, min_quantity=1, max_quantity=1), Drop(code="algae", rate=10, min_quantity=1, max_quantity=1)]))
-    mithril_rocks: ContentMap = field(default_factory=lambda: ContentMap(name="Mithril Rocks", code="mithril_rocks", level=40, skill="mining", pos=Position(-2, 13), drops=[Drop(code="mithril_ore", rate=1, min_quantity=1, max_quantity=1), Drop(code="topaz_stone", rate=550, min_quantity=1, max_quantity=1), Drop(code="topaz", rate=4500, min_quantity=1, max_quantity=1), Drop(code="emerald", rate=4500, min_quantity=1, max_quantity=1), Drop(code="emerald_stone", rate=550, min_quantity=1, max_quantity=1), Drop(code="ruby", rate=4500, min_quantity=1, max_quantity=1), Drop(code="ruby_stone", rate=550, min_quantity=1, max_quantity=1), Drop(code="sapphire", rate=4500, min_quantity=1, max_quantity=1), Drop(code="sapphire_stone", rate=550, min_quantity=1, max_quantity=1)]))
-    hellhound: ContentMap = field(default_factory=lambda: ContentMap(name="Hellhound", code="hellhound", level=40, skill="combat", pos=Position(-1, 13), drops=[Drop(code="hellhound_hair", rate=12, min_quantity=1, max_quantity=1), Drop(code="raw_hellhound_meat", rate=10, min_quantity=1, max_quantity=1), Drop(code="hellhound_bone", rate=12, min_quantity=1, max_quantity=1)]))
-    taskmaster_items: ContentMap = field(default_factory=lambda: ContentMap(name="Taksmaster of Items", code="items", level=1, skill=None, pos=Position(4, 13), drops=[]))
-    nettle: ContentMap = field(default_factory=lambda: ContentMap(name="Nettle", code="nettle", level=20, skill="alchemy", pos=Position(7, 14), drops=[Drop(code="nettle_leaf", rate=1, min_quantity=1, max_quantity=1)]))       
+    api: "ArtifactsAPI"
+    maps: Dict[str, ContentMap] = field(init=False, default_factory=dict)
 
+    def __post_init__(self):
+        self._cache_content_maps()
+        self._initialize_attributes()
+
+    def _cache_content_maps(self):
+        """
+        Fetch all content maps using `api.maps.get` and populate them based on content type.
+        """
+        try:
+            logger.debug("Fetching all maps using api.maps.get()", extra={"char": self.api.char.name})
+            all_maps = self.api.maps.get()  # Use the updated `get` method
+            logger.debug(f"Retrieved {len(all_maps)} maps from the API", extra={"char": self.api.char.name})
+
+            # Process each map and populate the maps dictionary
+            for map_data in all_maps:
+                x, y = map_data["x"], map_data["y"]
+                content = map_data.get("content", {})
+                if not content or not isinstance(content, dict):
+                    continue
+
+                content_type = content.get("type")
+                content_code = content.get("code")
+
+                # Fetch content-specific data
+                if content_type == "monster":
+                    monster = self.api.monsters.get(content_code)
+                    name = monster.name
+                    level = monster.level
+                    skill = "combat"
+                    drops = monster.drops
+                elif content_type == "resource":
+                    resource = self.api.resources.get(content_code)
+                    name = resource.name
+                    level = resource.level
+                    skill = resource.skill
+                    drops = resource.drops
+                elif content_type == "workshop":
+                    name = f"{content_code.capitalize()} Workshop"
+                    level = None
+                    skill = None
+                    drops = []
+                else:
+                    name = f"{content_code.capitalize()}"
+                    level = None
+                    skill = None
+                    drops = []
+
+                position = Position(x, y)
+                content_map = ContentMap(
+                    name=name,
+                    code=content_code,
+                    level=level,
+                    skill=skill,
+                    pos=position,
+                    drops=drops
+                )
+
+                # Handle duplicates based on Manhattan distance from (0, 0)
+                if content_code in self.maps:
+                    existing_map = self.maps[content_code]
+                    new_distance = position.dist(Position(0, 0))
+                    existing_distance = existing_map.pos.dist(Position(0, 0))
+                    if new_distance < existing_distance:
+                        self.maps[content_code] = content_map
+                else:
+                    self.maps[content_code] = content_map
+
+            logger.debug(f"Finished caching {len(self.maps)} content maps", extra={"char": self.api.char.name})
+
+        except Exception as e:
+            logger.error(f"Error while caching content maps: {e}", extra={"char": "ROOT"})
+
+    def _initialize_attributes(self):
+        """
+        Dynamically create attributes for each content map.
+        """
+        for map_code, content_map in self.maps.items():
+            attribute_name = self._sanitize_attribute_name(map_code)
+            setattr(self, attribute_name, content_map)
+
+    @staticmethod
+    def _sanitize_attribute_name(name: str) -> str:
+        """
+        Sanitize map codes to create valid Python attribute names.
+
+        Args:
+            name (str): The original map code.
+
+        Returns:
+            str: A sanitized attribute name.
+        """
+        return name.lower().replace(" ", "_").replace("-", "_")
+
+    def get_map(self, code: str) -> Optional[ContentMap]:
+        """
+        Retrieve a specific content map by its code.
+
+        Args:
+            code (str): The unique code for the content map.
+
+        Returns:
+            ContentMap or None: The content map if found, otherwise None.
+        """
+        return self.maps.get(code)
+
+    def get_all_maps(self) -> List[ContentMap]:
+        """
+        Retrieve all cached content maps.
+
+        Returns:
+            List[ContentMap]: List of all cached content maps.
+        """
+        return list(self.maps.values())
 
 @dataclass
 class InventoryItem:
@@ -944,7 +1108,7 @@ class Actions:
         Returns:
             dict: Response data confirming task acceptance.
         """
-        endpoint = f"my/{self.api.char.name}/action/task/new"
+        endpoint = f"my/{self.api.char.name}/action/tasks/new"
         res = self.api._make_request("POST", endpoint, source="accept_task")
         return res
 
@@ -955,7 +1119,7 @@ class Actions:
         Returns:
             dict: Response data confirming task completion.
         """
-        endpoint = f"my/{self.api.char.name}/action/task/complete"
+        endpoint = f"my/{self.api.char.name}/action/tasks/complete"
         res = self.api._make_request("POST", endpoint, source="complete_task")
         return res
 
@@ -966,7 +1130,7 @@ class Actions:
         Returns:
             dict: Response data confirming task exchange.
         """
-        endpoint = f"my/{self.api.char.name}/action/task/exchange"
+        endpoint = f"my/{self.api.char.name}/action/tasks/exchange"
         res = self.api._make_request("POST", endpoint, source="exchange_task")
         return res
 
@@ -981,7 +1145,7 @@ class Actions:
         Returns:
             dict: Response data confirming task trade.
         """
-        endpoint = f"my/{self.api.char.name}/action/task/trade"
+        endpoint = f"my/{self.api.char.name}/action/tasks/trade"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="trade_task")
         return res
@@ -993,7 +1157,7 @@ class Actions:
         Returns:
             dict: Response data confirming task cancellation.
         """
-        endpoint = f"my/{self.api.char.name}/action/task/cancel"
+        endpoint = f"my/{self.api.char.name}/action/tasks/cancel"
         res = self.api._make_request("POST", endpoint, source="cancel_task")
         return res
  
@@ -1007,50 +1171,59 @@ class Items:
         endpoint = "items?size=1"
         res = self.api._make_request("GET", endpoint, source="get_all_items")
         pages = math.ceil(int(res["pages"]) / 100)
-        
-        m = f"Caching {pages} pages of items"
-        logger.debug(m, extra={"char": self.api.char.name})
-        
+
+        logger.debug(f"Caching {pages} pages of items", extra={"char": self.api.char.name})
+
         all_items = []
         for i in range(pages):
             endpoint = f"items?size=100&page={i+1}"
             res = self.api._make_request("GET", endpoint, source="get_all_items")
             item_list = res["data"]
-            all_items.extend(item_list)
-            
-            # Log the number of items fetched in each page
+
+            all_items.extend([
+                Item(
+                    name=item["name"],
+                    code=item["code"],
+                    level=item["level"],
+                    type=item["type"],
+                    subtype=item.get("subtype"),
+                    description=item.get("description"),
+                    effects=[Effect(**effect) for effect in item.get("effects", [])],
+                    craft=CraftingRecipe(**item["craft"]) if item.get("craft") else None,
+                    tradeable=item.get("tradeable", False),
+                ) for item in item_list
+            ])
             logger.debug(f"Fetched {len(item_list)} items from page {i+1}", extra={"char": self.api.char.name})
-        
-        self.cache = {item['code']: item for item in all_items}
+
+        self.cache = {item.code: item for item in all_items}
         self.all_items = all_items
-        
+
         logger.debug(f"Finished caching {len(all_items)} items", extra={"char": self.api.char.name})
-    
+
     def _filter_items(self, craft_material=None, craft_skill=None, max_level=None, min_level=None, 
                     name=None, item_type=None):
         filtered_items = self.all_items
-        
+
         if craft_material:
             filtered_items = [
                 item for item in filtered_items 
-                if item.get('craft') and 
-                any(material['code'] == craft_material for material in item['craft'].get('items', []))
+                if item.craft and 
+                any(material['code'] == craft_material for material in item.craft.items)
             ]
         if craft_skill:
-            filtered_items = [item for item in filtered_items if item.get('craft') and item['craft']['skill'] == craft_skill]
+            filtered_items = [item for item in filtered_items if item.craft and item.craft.skill == craft_skill]
         if max_level is not None:
-            filtered_items = [item for item in filtered_items if item['level'] <= max_level]
+            filtered_items = [item for item in filtered_items if item.level <= max_level]
         if min_level is not None:
-            filtered_items = [item for item in filtered_items if item['level'] >= min_level]
+            filtered_items = [item for item in filtered_items if item.level >= min_level]
         if name:
             name_pattern = re.compile(name, re.IGNORECASE)
-            filtered_items = [item for item in filtered_items if name_pattern.search(item['name'])]
+            filtered_items = [item for item in filtered_items if name_pattern.search(item.name)]
         if item_type:
-            filtered_items = [item for item in filtered_items if item['type'] == item_type]
+            filtered_items = [item for item in filtered_items if item.type == item_type]
 
         return filtered_items
-
-    def get_item(self, item_code=None, **filters):
+    def get(self, item_code=None, **filters):
         """
         Get a specific item by its code or filter items based on the provided parameters.
 
@@ -1103,16 +1276,16 @@ class Maps:
 
     def _filter_maps(self, map_content=None, content_type=None):
         filtered_maps = self.all_maps
-        
+
         if map_content:
             content_pattern = re.compile(map_content, re.IGNORECASE)
-            filtered_maps = [map_item for map_item in filtered_maps if content_pattern.search(map_item.get('content', ''))]
+            filtered_maps = [map_item for map_item in filtered_maps if content_pattern.search(map_item.content_code)]
         if content_type:
-            filtered_maps = [map_item for map_item in filtered_maps if map_item.get('content_type') == content_type]
+            filtered_maps = [map_item for map_item in filtered_maps if map_item.content_type == content_type]
 
         return filtered_maps
 
-    def get_map(self, x=None, y=None, **filters):
+    def get(self, x=None, y=None, **filters):
         """
         Retrieves a specific map by coordinates or filters maps based on provided parameters.
         
@@ -1142,38 +1315,57 @@ class Monsters:
         endpoint = "monsters?size=1"
         res = self.api._make_request("GET", endpoint, source="get_all_monsters")
         pages = math.ceil(int(res["pages"]) / 100)
-        
+
         logger.debug(f"Caching {pages} pages of monsters", extra={"char": self.api.char.name})
-        
+
         all_monsters = []
         for i in range(pages):
             endpoint = f"monsters?size=100&page={i+1}"
             res = self.api._make_request("GET", endpoint, source="get_all_monsters")
             monster_list = res["data"]
-            all_monsters.extend(monster_list)
+
+            all_monsters.extend([
+                Monster(
+                    name=monster["name"],
+                    code=monster["code"],
+                    level=monster["level"],
+                    hp=monster["hp"],
+                    attack_fire=monster["attack_fire"],
+                    attack_earth=monster["attack_earth"],
+                    attack_water=monster["attack_water"],
+                    attack_air=monster["attack_air"],
+                    res_fire=monster["res_fire"],
+                    res_earth=monster["res_earth"],
+                    res_water=monster["res_water"],
+                    res_air=monster["res_air"],
+                    min_gold=monster["min_gold"],
+                    max_gold=monster["max_gold"],
+                    drops=[Drop(**drop) for drop in monster["drops"]],
+                ) for monster in monster_list
+            ])
             logger.debug(f"Fetched {len(monster_list)} monsters from page {i+1}", extra={"char": self.api.char.name})
-        
-        self.cache = {monster['code']: monster for monster in all_monsters}
+
+        self.cache = {monster.code: monster for monster in all_monsters}
         self.all_monsters = all_monsters
-        
+
         logger.debug(f"Finished caching {len(all_monsters)} monsters", extra={"char": self.api.char.name})
 
     def _filter_monsters(self, drop=None, max_level=None, min_level=None):
         filtered_monsters = self.all_monsters
-        
+
         if drop:
             filtered_monsters = [
                 monster for monster in filtered_monsters 
-                if any(d['code'] == drop for d in monster.get('drops', []))
+                if any(d['code'] == drop for d in monster.drops)
             ]
         if max_level is not None:
-            filtered_monsters = [monster for monster in filtered_monsters if monster['level'] <= max_level]
+            filtered_monsters = [monster for monster in filtered_monsters if monster.level <= max_level]
         if min_level is not None:
-            filtered_monsters = [monster for monster in filtered_monsters if monster['level'] >= min_level]
+            filtered_monsters = [monster for monster in filtered_monsters if monster.level >= min_level]
 
         return filtered_monsters
 
-    def get_monster(self, monster_code=None, **filters):
+    def get(self, monster_code=None, **filters):
         """
         Retrieves a specific monster or filters monsters based on provided parameters.
         
@@ -1203,41 +1395,49 @@ class Resources:
         endpoint = "resources?size=1"
         res = self.api._make_request("GET", endpoint, source="get_all_resources")
         pages = math.ceil(int(res["pages"]) / 100)
-        
+
         logger.debug(f"Caching {pages} pages of resources", extra={"char": self.api.char.name})
-        
+
         all_resources = []
         for i in range(pages):
             endpoint = f"resources?size=100&page={i+1}"
             res = self.api._make_request("GET", endpoint, source="get_all_resources")
             resource_list = res["data"]
-            all_resources.extend(resource_list)
-            logger.debug(f"Fetched {len(resource_list)} resources from page {i+1}", 
-                        extra={"char": self.api.char.name})
-        
-        self.cache = {resource['code']: resource for resource in all_resources}
+
+            all_resources.extend([
+                Resource(
+                    name=resource["name"],
+                    code=resource["code"],
+                    skill=resource.get("skill"),
+                    level=resource["level"],
+                    drops=[Drop(**drop) for drop in resource.get("drops", [])],
+                ) for resource in resource_list
+            ])
+            logger.debug(f"Fetched {len(resource_list)} resources from page {i+1}", extra={"char": self.api.char.name})
+
+        self.cache = {resource.code: resource for resource in all_resources}
         self.all_resources = all_resources
-        
+
         logger.debug(f"Finished caching {len(all_resources)} resources", extra={"char": self.api.char.name})
 
     def _filter_resources(self, drop=None, max_level=None, min_level=None, skill=None):
         filtered_resources = self.all_resources
-        
+
         if drop:
             filtered_resources = [
                 resource for resource in filtered_resources 
-                if any(d['code'] == drop for d in resource.get('drops', []))
+                if any(d['code'] == drop for d in resource.drops)
             ]
         if max_level is not None:
-            filtered_resources = [resource for resource in filtered_resources if resource['level'] <= max_level]
+            filtered_resources = [resource for resource in filtered_resources if resource.level <= max_level]
         if min_level is not None:
-            filtered_resources = [resource for resource in filtered_resources if resource['level'] >= min_level]
+            filtered_resources = [resource for resource in filtered_resources if resource.level >= min_level]
         if skill:
-            filtered_resources = [resource for resource in filtered_resources if resource.get('skill') == skill]
+            filtered_resources = [resource for resource in filtered_resources if resource.skill == skill]
 
         return filtered_resources
 
-    def get_resource(self, resource_code=None, **filters):
+    def get(self, resource_code=None, **filters):
         """
         Retrieves a specific resource or filters resources based on provided parameters.
         
@@ -1263,67 +1463,59 @@ class Tasks:
         self.api = api
         self.cache = {}
         self.all_tasks = []
-        self.rewards_cache = {}
-        self.all_rewards = []
 
     def _cache_tasks(self):
-        endpoint = "task/list?size=1"
+        endpoint = "tasks/list?size=1"
         res = self.api._make_request("GET", endpoint, source="get_all_tasks")
         pages = math.ceil(int(res["pages"]) / 100)
-        
+
         logger.debug(f"Caching {pages} pages of tasks", extra={"char": self.api.char.name})
-        
+
         all_tasks = []
         for i in range(pages):
-            endpoint = f"task/list?size=100&page={i+1}"
+            endpoint = f"tasks/list?size=100&page={i+1}"
             res = self.api._make_request("GET", endpoint, source="get_all_tasks")
             task_list = res["data"]
-            all_tasks.extend(task_list)
-            logger.debug(f"Fetched {len(task_list)} tasks from page {i+1}", extra={"char": self.api.char.name})
-        
-        self.cache = {task['code']: task for task in all_tasks}
-        self.all_tasks = all_tasks
-        
-        logger.debug(f"Finished caching {len(all_tasks)} tasks", extra={"char": self.api.char.name})
 
-    def _cache_rewards(self):
-        endpoint = "task/rewards?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
-        pages = math.ceil(int(res["pages"]) / 100)
-        
-        logger.debug(f"Caching {pages} pages of task rewards", extra={"char": self.api.char.name})
-        
-        all_rewards = []
-        for i in range(pages):
-            endpoint = f"task/rewards?size=100&page={i+1}"
-            res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
-            reward_list = res["data"]
-            all_rewards.extend(reward_list)
-            logger.debug(f"Fetched {len(reward_list)} task rewards from page {i+1}", extra={"char": self.api.char.name})
-        
-        self.rewards_cache = {reward['code']: reward for reward in all_rewards}
-        self.all_rewards = all_rewards
-        
-        logger.debug(f"Finished caching {len(all_rewards)} task rewards", extra={"char": self.api.char.name})
+            all_tasks.extend([
+                Task(
+                    code=task["code"],
+                    level=task["level"],
+                    type=task.get("type"),
+                    min_quantity=task["min_quantity"],
+                    max_quantity=task["max_quantity"],
+                    skill=task.get("skill"),
+                    rewards=TaskReward(
+                        items=[{"code": item["code"], "quantity": item["quantity"]} for item in task["rewards"].get("items", [])],
+                        gold=task["rewards"].get("gold", 0)
+                    ) if task.get("rewards") else None,
+                ) for task in task_list
+            ])
+            logger.debug(f"Fetched {len(task_list)} tasks from page {i+1}", extra={"char": self.api.char.name})
+
+        self.cache = {task.code: task for task in all_tasks}
+        self.all_tasks = all_tasks
+
+        logger.debug(f"Finished caching {len(all_tasks)} tasks", extra={"char": self.api.char.name})
 
     def _filter_tasks(self, skill=None, task_type=None, max_level=None, min_level=None, name=None):
         filtered_tasks = self.all_tasks
-        
+
         if skill:
-            filtered_tasks = [task for task in filtered_tasks if task.get('skill') == skill]
+            filtered_tasks = [task for task in filtered_tasks if task.skill == skill]
         if task_type:
-            filtered_tasks = [task for task in filtered_tasks if task.get('type') == task_type]
+            filtered_tasks = [task for task in filtered_tasks if task.type == task_type]
         if max_level is not None:
-            filtered_tasks = [task for task in filtered_tasks if task['level'] <= max_level]
+            filtered_tasks = [task for task in filtered_tasks if task.level <= max_level]
         if min_level is not None:
-            filtered_tasks = [task for task in filtered_tasks if task['level'] >= min_level]
+            filtered_tasks = [task for task in filtered_tasks if task.level >= min_level]
         if name:
             name_pattern = re.compile(name, re.IGNORECASE)
-            filtered_tasks = [task for task in filtered_tasks if name_pattern.search(task['name'])]
+            filtered_tasks = [task for task in filtered_tasks if name_pattern.search(task.name)]
 
         return filtered_tasks
 
-    def get_task(self, task_code=None, **filters):
+    def get(self, task_code=None, **filters):
         """
         Retrieves a specific task or filters tasks based on provided parameters.
         
@@ -1345,13 +1537,47 @@ class Tasks:
             return self.cache.get(task_code)
         return self._filter_tasks(**filters)
 
-    # Refactored for task rewards
+class Rewards:
+    def __init__(self, api: "ArtifactsAPI"):
+        self.api = api
+        self.cache = {}
+        self.all_rewards = []
+
+    def _cache_rewards(self):
+        endpoint = "tasks/rewards?size=1"
+        res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
+        pages = math.ceil(int(res["pages"]) / 100)
+
+        logger.debug(f"Caching {pages} pages of task rewards", extra={"char": self.api.char.name})
+
+        all_rewards = []
+        for i in range(pages):
+            endpoint = f"tasks/rewards?size=100&page={i+1}"
+            res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
+            reward_list = res["data"]
+
+            all_rewards.extend([
+                Reward(
+                    code=reward["code"],
+                    rate=reward["rate"],
+                    min_quantity=reward["min_quantity"],
+                    max_quantity=reward["max_quantity"],
+                ) for reward in reward_list
+            ])
+            logger.debug(f"Fetched {len(reward_list)} task rewards from page {i+1}", extra={"char": self.api.char.name})
+
+        self.rewards_cache = {reward.code: reward for reward in all_rewards}
+        self.all_rewards = all_rewards
+
+        logger.debug(f"Finished caching {len(all_rewards)} task rewards", extra={"char": self.api.char.name})
+
+
     def _filter_rewards(self, name=None):
         filtered_rewards = self.all_rewards
-        
+
         if name:
             name_pattern = re.compile(name, re.IGNORECASE)
-            filtered_rewards = [reward for reward in filtered_rewards if name_pattern.search(reward['name'])]
+            filtered_rewards = [reward for reward in filtered_rewards if name_pattern.search(reward.name)]
 
         return filtered_rewards
 
@@ -1365,20 +1591,16 @@ class Tasks:
 
         return self._filter_rewards(**filters)
 
-    def get_reward(self, task_code=None, **filters):
+    def get(self, task_code=None):
         """
         Retrieves a specific reward or filters rewards based on provided parameters.
         
         Args:
             reward_code (str, optional): Retrieve reward by its unique code.
-            **filters: Optional filter parameters. Supported filters:
-                - name: Filter by reward name (case-insensitive).
 
         Returns:
             dict or list: A single reward if reward_code is provided, else a filtered list of rewards.
         """
-        logger.debug(f"Getting task reward with filters: {filters}", extra={"char": self.api.char.name})
-        
         if not self.all_rewards:
             logger.debug("Rewards cache is empty, calling _cache_rewards() to load rewards.", 
                         extra={"char": self.api.char.name})
@@ -1391,8 +1613,6 @@ class Tasks:
             else:
                 logger.debug(f"Reward with code {task_code} not found in cache", extra={"char": self.api.char.name})
             return reward
-        
-        return self._filter_rewards(**filters)
 
 class Achievements:
     def __init__(self, api: "ArtifactsAPI"):
@@ -1404,63 +1624,79 @@ class Achievements:
         endpoint = "achievements?size=1"
         res = self.api._make_request("GET", endpoint, source="get_all_achievements")
         pages = math.ceil(int(res["pages"]) / 100)
-        
+
         logger.debug(f"Caching {pages} pages of achievements", extra={"char": self.api.char.name})
-        
+
         all_achievements = []
         for i in range(pages):
             endpoint = f"achievements?size=100&page={i+1}"
             res = self.api._make_request("GET", endpoint, source="get_all_achievements")
             achievement_list = res["data"]
-            all_achievements.extend(achievement_list)
-            logger.debug(f"Fetched {len(achievement_list)} achievements from page {i+1}", 
-                        extra={"char": self.api.char.name})
-        
-        self.cache = {achievement['code']: achievement for achievement in all_achievements}
-        self.all_achievements = all_achievements
-        
-        logger.debug(f"Finished caching {len(all_achievements)} achievements", 
-                    extra={"char": self.api.char.name})
 
-    def _filter_achievements(self, achievement_type=None, name=None, description=None, reward_type=None, 
-                            reward_item=None, points_min=None, points_max=None):
+            all_achievements.extend([
+                Achievement(
+                    name=achievement["name"],
+                    code=achievement["code"],
+                    description=achievement["description"],
+                    points=achievement["points"],
+                    type=achievement["type"],
+                    target=achievement["target"],
+                    total=achievement["total"],
+                    rewards=AchievementReward(gold=achievement["rewards"].get("gold", 0)),
+                ) for achievement in achievement_list
+            ])
+            logger.debug(f"Fetched {len(achievement_list)} achievements from page {i+1}", extra={"char": self.api.char.name})
+
+        self.cache = {achievement.code: achievement for achievement in all_achievements}
+        self.all_achievements = all_achievements
+
+        logger.debug(f"Finished caching {len(all_achievements)} achievements", extra={"char": self.api.char.name})
+
+    def _filter_achievements(self, achievement_type=None, name=None, description=None, reward_type=None,
+                              reward_item=None, points_min=None, points_max=None):
         filtered_achievements = self.all_achievements
-        
+
         if achievement_type:
             filtered_achievements = [
-                achievement for achievement in filtered_achievements 
-                if achievement.get('type') == achievement_type
+                achievement for achievement in filtered_achievements
+                if achievement.type == achievement_type
             ]
         if name:
             name_pattern = re.compile(name, re.IGNORECASE)
             filtered_achievements = [
-                achievement for achievement in filtered_achievements 
-                if name_pattern.search(achievement['name'])
+                achievement for achievement in filtered_achievements
+                if name_pattern.search(achievement.name)
             ]
         if description:
             desc_pattern = re.compile(description, re.IGNORECASE)
             filtered_achievements = [
-                achievement for achievement in filtered_achievements 
-                if desc_pattern.search(achievement.get('description', ''))
+                achievement for achievement in filtered_achievements
+                if desc_pattern.search(achievement.description)
             ]
         if reward_type:
             filtered_achievements = [
-                achievement for achievement in filtered_achievements 
-                if any(reward.get('type') == reward_type for reward in achievement.get('rewards', []))
+                achievement for achievement in filtered_achievements
+                if any(reward.get('type') == reward_type for reward in achievement.rewards)
             ]
         if reward_item:
             filtered_achievements = [
-                achievement for achievement in filtered_achievements 
-                if any(reward.get('code') == reward_item for reward in achievement.get('rewards', []))
+                achievement for achievement in filtered_achievements
+                if any(reward.get('code') == reward_item for reward in achievement.rewards)
             ]
         if points_min is not None:
-            filtered_achievements = [achievement for achievement in filtered_achievements if achievement.get('points', 0) >= points_min]
+            filtered_achievements = [
+                achievement for achievement in filtered_achievements
+                if achievement.points >= points_min
+            ]
         if points_max is not None:
-            filtered_achievements = [achievement for achievement in filtered_achievements if achievement.get('points', 0) <= points_max]
+            filtered_achievements = [
+                achievement for achievement in filtered_achievements
+                if achievement.points <= points_max
+            ]
 
         return filtered_achievements
 
-    def get_achievement(self, achievement_code=None, **filters):
+    def get(self, achievement_code=None, **filters):
         """
         Retrieves a specific achievement or filters achievements based on provided parameters.
         
@@ -1484,7 +1720,6 @@ class Achievements:
             return self.cache.get(achievement_code)
         return self._filter_achievements(**filters)
 
-    
 class Events:
     def __init__(self, api: "ArtifactsAPI"):
         """
@@ -1704,10 +1939,11 @@ class ArtifactsAPI:
         self.events = Events(self)
         self.ge = GE(self)
         self.tasks = Tasks(self)
+        self.task_rewards = Rewards(self)
         self.achievments = Achievements(self)
         self.leaderboard = Leaderboard(self)
         self.accounts = Accounts(self)
-        self.content_maps = ContentMaps()
+        self.content_maps = ContentMaps(self)
 
         self.logger.debug("Finished instantiating wrapper for " + character_name, extra = {"char": character_name})
 
@@ -1809,8 +2045,8 @@ class ArtifactsAPI:
                 logger.warning(m, extra={"char": self.char.name})
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
-        if code != 200 and code != 490:
-            raise Exception(m)
+            case _:
+                raise Exception(m)
 
 
     # --- Helper Functions ---

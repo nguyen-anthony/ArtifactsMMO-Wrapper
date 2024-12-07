@@ -54,6 +54,7 @@ For another quick start, you can write your own Javascript scripts directly in t
 
 ## Before You Begin
 The first step is to [create your account](https://artifactsmmo.com/account/create) and your first character [by logging in](https://artifactsmmo.com/account/characters). After that you'll need your token, which you can find [on your account](https://artifactsmmo.com/account/).
+**⚠️ It is not allowed to play with more than one account. All accounts involved in multi-accounting will be banned **
 
 ![API Token Box](https://artifactsmmo.com/images/docs/token.png)
 

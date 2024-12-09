@@ -1,5 +1,8 @@
 # ArtifactsMMO API Wrapper
-[![Upload Python Package](https://github.com/Veillax/ArtifactsMMO-Wrapper/actions/workflows/python-publish.yml/badge.svg)](https://github.com/Veillax/ArtifactsMMO-Wrapper/actions/workflows/python-publish.yml)
+![PyPI - Version](https://img.shields.io/pypi/v/artifactsmmo-wrapper?label=Version)
+![PyPI - License](https://img.shields.io/pypi/l/artifactsmmo-wrapper?label=License)
+![GitHub Release Date](https://img.shields.io/github/release-date/Veillax/ArtifactsMMO-Wrapper?label=Release%20Date)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/artifactsmmo-wrapper?label=Downloads)
 ## Disclaimer
 
 This wrapper is a third-party tool and is not officially affiliated with Artifacts MMO. Use it responsibly and at your own risk. Be aware of the game's terms of service and avoid any actions that could violate them.

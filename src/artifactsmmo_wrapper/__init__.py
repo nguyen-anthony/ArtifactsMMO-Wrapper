@@ -9,6 +9,8 @@ from threading import Lock
 from functools import wraps
 import math
 import re
+import sqlite3
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -18,16 +20,117 @@ formatter = logging.Formatter(
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-
 # Create a handler (e.g., StreamHandler for console output) and set its format
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 
 logger.addHandler(console_handler)
 
-# --- Exceptions ---
+# --- Globals ---
+db = sqlite3.connect('artifacts.db')
+db_cursor = db.cursor()
+db_cursor.execute("CREATE TABLE IF NOT EXISTS cache_table (cache_table TEXT PRIMARY KEY, version TEXT)")
+db.commit()
 
-# Exception class with logging
+# --- Helpers ---
+def _re_cache(api, table):
+    print(table)
+    
+    # Use parameterized query to avoid SQL injection
+    db_cursor.execute("SELECT version FROM cache_table WHERE cache_table = ?", (table,))
+    version = db_cursor.fetchone()
+
+    app_version = api._get_version()
+
+    try:
+        if version:
+            if app_version != version[0]:
+                db_cursor.execute("INSERT or REPLACE INTO cache_table (cache_table, version) VALUES (?, ?)", (table, app_version))
+                db.commit()
+                return True
+
+        else:  # No record exists
+            db_cursor.execute("INSERT or REPLACE INTO cache_table (cache_table, version) VALUES (?, ?)", (table, app_version))
+            db.commit()
+            return True
+
+        return False
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+class CooldownManager:
+    """
+    A class to manage cooldowns for different operations using an expiration timestamp.
+    """
+    def __init__(self):
+        self.lock = Lock()
+        self.cooldown_expiration_time = None
+        self.logger = None
+
+    def is_on_cooldown(self) -> bool:
+        """Check if currently on cooldown based on expiration time."""
+        with self.lock:
+            if self.cooldown_expiration_time is None:
+                return False  # No cooldown set
+            # Check if current time is before the expiration time
+            return datetime.now(timezone.utc) < self.cooldown_expiration_time
+
+    def set_cooldown_from_expiration(self, expiration_time_str: str) -> None:
+        """Set cooldown based on an ISO 8601 expiration time string."""
+        with self.lock:
+            # Parse the expiration time string
+            self.cooldown_expiration_time = datetime.fromisoformat(expiration_time_str.replace("Z", "+00:00"))
+
+    def wait_for_cooldown(self, logger=None, char=None) -> None:
+        """Wait until the cooldown expires."""
+        if self.is_on_cooldown():
+            remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
+            if logger:
+                if char:
+                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": char.name})
+                else:
+                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": "Unknown"})
+            while self.is_on_cooldown():
+                remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
+                time.sleep(min(remaining, 0.1))  # Sleep in small intervals
+
+def with_cooldown(func):
+    """
+    Decorator to apply cooldown management to a method.
+    """
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if not hasattr(self, '_cooldown_manager'):
+            self._cooldown_manager = CooldownManager()
+        
+        # Before executing the action, check if the character is on cooldown
+        source = kwargs.get('source')
+        method = kwargs.get('method')
+        
+        # Skip cooldown for "get_character" source to allow fetching character data without waiting
+        if source != "get_character":
+            # Ensure cooldown manager is up to date with the character's cooldown expiration time
+            if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
+                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
+
+            # Wait for the cooldown to finish before calling the function
+            self._cooldown_manager.wait_for_cooldown(logger=self.logger, char=self.char)
+
+        # Now execute the function after confirming cooldown is finished
+        result = func(self, *args, **kwargs)
+
+        # Update the cooldown after the action if needed (depending on your business logic)
+        if method not in ["GET", None, "None"]:
+            # Set cooldown after the operation, if the character has a cooldown expiration
+            if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
+                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
+        
+        return result
+    return wrapper
+
+
+# --- Exceptions ---
 class APIException(Exception):
     """Base exception class for API errors"""
     
@@ -171,77 +274,6 @@ class APIException(Exception):
         def __init__(self, message="Max characters reached"):
             super().__init__(message)
             logger.warning(f"MaxCharactersReached: {message}", extra={"char": "ROOT"})
-
-
-class CooldownManager:
-    """
-    A class to manage cooldowns for different operations using an expiration timestamp.
-    """
-    def __init__(self):
-        self.lock = Lock()
-        self.cooldown_expiration_time = None
-        self.logger = None
-
-    def is_on_cooldown(self) -> bool:
-        """Check if currently on cooldown based on expiration time."""
-        with self.lock:
-            if self.cooldown_expiration_time is None:
-                return False  # No cooldown set
-            # Check if current time is before the expiration time
-            return datetime.now(timezone.utc) < self.cooldown_expiration_time
-
-    def set_cooldown_from_expiration(self, expiration_time_str: str) -> None:
-        """Set cooldown based on an ISO 8601 expiration time string."""
-        with self.lock:
-            # Parse the expiration time string
-            self.cooldown_expiration_time = datetime.fromisoformat(expiration_time_str.replace("Z", "+00:00"))
-
-    def wait_for_cooldown(self, logger=None, char=None) -> None:
-        """Wait until the cooldown expires."""
-        if self.is_on_cooldown():
-            remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
-            if logger:
-                if char:
-                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": char.name})
-                else:
-                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": "Unknown"})
-            while self.is_on_cooldown():
-                remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
-                time.sleep(min(remaining, 0.1))  # Sleep in small intervals
-
-def with_cooldown(func):
-    """
-    Decorator to apply cooldown management to a method.
-    """
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        if not hasattr(self, '_cooldown_manager'):
-            self._cooldown_manager = CooldownManager()
-        
-        # Before executing the action, check if the character is on cooldown
-        source = kwargs.get('source')
-        method = kwargs.get('method')
-        
-        # Skip cooldown for "get_character" source to allow fetching character data without waiting
-        if source != "get_character":
-            # Ensure cooldown manager is up to date with the character's cooldown expiration time
-            if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
-                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
-
-            # Wait for the cooldown to finish before calling the function
-            self._cooldown_manager.wait_for_cooldown(logger=self.logger, char=self.char)
-
-        # Now execute the function after confirming cooldown is finished
-        result = func(self, *args, **kwargs)
-
-        # Update the cooldown after the action if needed (depending on your business logic)
-        if method not in ["GET", None, "None"]:
-            # Set cooldown after the operation, if the character has a cooldown expiration
-            if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
-                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
-        
-        return result
-    return wrapper
 
 
 # --- Dataclasses ---
@@ -1051,54 +1083,6 @@ class Actions:
         res = self.api._make_request("POST", endpoint, source="bank_buy_expansion")
         return res
 
-    # --- Grand Exchange Actions Functions ---
-    def ge_buy_item(self, order_id: str, quantity: int = 1) -> dict:
-        """
-        Buy an item from the Grand Exchange.
-
-        Args:
-            order_id (str): ID of the order to buy from.
-            quantity (int): Quantity of the item to buy (default is 1).
-
-        Returns:
-            dict: Response data with transaction details.
-        """
-        endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
-        json = {"id": order_id, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json, source="ge_buy")
-        return res
-
-    def ge_create_sell_order(self, item_code: str, price: int, quantity: int = 1) -> dict:
-        """
-        Create a sell order on the Grand Exchange.
-
-        Args:
-            item_code (str): Code of the item to sell.
-            price (int): Selling price per unit.
-            quantity (int): Quantity of the item to sell (default is 1).
-
-        Returns:
-            dict: Response data confirming the sell order.
-        """
-        endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
-        json = {"code": item_code, "item_code": price, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json, source="ge_sell")
-        return res
-
-    def ge_cancel_sell_order(self, order_id: str) -> dict:
-        """
-        Cancel an active sell order on the Grand Exchange.
-
-        Args:
-            order_id (str): ID of the order to cancel.
-
-        Returns:
-            dict: Response data confirming the order cancellation.
-        """
-        endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
-        json = {"id": order_id}
-        res = self.api._make_request("POST", endpoint, json=json, source="ge_cancel_sell")
-        return res
 
     # --- Taskmaster Action Functions ---
     def taskmaster_accept_task(self) -> dict:
@@ -1168,61 +1152,105 @@ class Items:
         self.all_items = []
     
     def _cache_items(self):
-        endpoint = "items?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_items")
-        pages = math.ceil(int(res["pages"]) / 100)
-
-        logger.debug(f"Caching {pages} pages of items", extra={"char": self.api.char.name})
-
-        all_items = []
-        for i in range(pages):
-            endpoint = f"items?size=100&page={i+1}"
+        
+        if _re_cache(self.api, "item_cache"):
+            db_cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS item_cache  (
+                name TEXT PRIMARY KEY,
+                code TEXT,
+                type TEXT,
+                subtype TEXT,
+                description TEXT,
+                effects TEXT,
+                craft TEXT,
+                tradeable BOOL
+            )
+            """
+            )
+            db.commit()
+                    
+            endpoint = "items?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_items")
-            item_list = res["data"]
+            pages = math.ceil(int(res["pages"]) / 100)
 
-            all_items.extend([
-                Item(
-                    name=item["name"],
-                    code=item["code"],
-                    level=item["level"],
-                    type=item["type"],
-                    subtype=item.get("subtype"),
-                    description=item.get("description"),
-                    effects=[Effect(**effect) for effect in item.get("effects", [])],
-                    craft=CraftingRecipe(**item["craft"]) if item.get("craft") else None,
-                    tradeable=item.get("tradeable", False),
-                ) for item in item_list
-            ])
-            logger.debug(f"Fetched {len(item_list)} items from page {i+1}", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of items", extra={"char": self.api.char.name})
 
-        self.cache = {item.code: item for item in all_items}
-        self.all_items = all_items
+            all_items = []
+            for i in range(pages):
+                endpoint = f"items?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_items", include_headers=True)
+                item_list = res["json"]["data"]
 
-        logger.debug(f"Finished caching {len(all_items)} items", extra={"char": self.api.char.name})
+
+                for item in item_list:
+                    name = item["name"]
+                    code = item["code"]
+                    type_ = item["type"]
+                    subtype = item.get("subtype", "")
+                    description = item.get("description", "")
+                    effects = json.dumps(item.get("effects", []))  # Serialize the effects as JSON
+                    craft = json.dumps(item["craft"]) if item.get("craft") else None  # Serialize craft if available
+                    tradeable = item.get("tradeable", False)
+
+                    # Insert the item into the database
+                    db.execute("""
+                    INSERT OR REPLACE INTO item_cache (name, code, type, subtype, description, effects, craft, tradeable)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (name, code, type_, subtype, description, effects, craft, tradeable))
+                    
+                    db.commit()
+
+
+            self.cache = {item.code: item for item in all_items}
+            self.all_items = all_items
+
+            logger.debug(f"Finished caching {len(all_items)} items", extra={"char": self.api.char.name})
 
     def _filter_items(self, craft_material=None, craft_skill=None, max_level=None, min_level=None, 
-                    name=None, item_type=None):
-        filtered_items = self.all_items
+                      name=None, item_type=None):
 
+        # Base SQL query to select all items
+        query = "SELECT * FROM item_cache WHERE 1=1"
+        params = []
+
+        # Apply filters to the query
         if craft_material:
-            filtered_items = [
-                item for item in filtered_items 
-                if item.craft and 
-                any(material['code'] == craft_material for material in item.craft.items)
-            ]
+            query += " AND EXISTS (SELECT 1 FROM json_each(json_extract(item_cache.craft, '$.items')) WHERE json_each.value LIKE ?)"
+            params.append(f"%{craft_material}%")
+        
         if craft_skill:
-            filtered_items = [item for item in filtered_items if item.craft and item.craft.skill == craft_skill]
-        if max_level is not None:
-            filtered_items = [item for item in filtered_items if item.level <= max_level]
-        if min_level is not None:
-            filtered_items = [item for item in filtered_items if item.level >= min_level]
-        if name:
-            name_pattern = re.compile(name, re.IGNORECASE)
-            filtered_items = [item for item in filtered_items if name_pattern.search(item.name)]
-        if item_type:
-            filtered_items = [item for item in filtered_items if item.type == item_type]
+            query += " AND json_extract(item_cache.craft, '$.skill') = ?"
+            params.append(craft_skill)
 
-        return filtered_items
+        if max_level is not None:
+            query += " AND item_cache.level <= ?"
+            params.append(max_level)
+
+        if min_level is not None:
+            query += " AND item_cache.level >= ?"
+            params.append(min_level)
+
+        if name:
+            name_pattern = f"%{name}%"
+            query += " AND item_cache.name LIKE ?"
+            params.append(name_pattern)
+
+        if item_type:
+            query += " AND item_cache.type = ?"
+            params.append(item_type)
+
+        # Execute the query
+        db_cursor.execute(query, params)
+        rows = db_cursor.fetchall()
+
+        # Close the connection
+        db_cursor.close()
+        db.close()
+
+        # Return the filtered items
+        return rows
+
     def get(self, item_code=None, **filters):
         """
         Get a specific item by its code or filter items based on the provided parameters.
@@ -1255,35 +1283,72 @@ class Maps:
         self.all_maps = []
 
     def _cache_maps(self):
-        endpoint = "maps?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_maps")
-        pages = math.ceil(int(res["pages"]) / 100)
-        
-        logger.debug(f"Caching {pages} pages of maps", extra={"char": self.api.char.name})
-        
-        all_maps = []
-        for i in range(pages):
-            endpoint = f"maps?size=100&page={i+1}"
+        if _re_cache(self.api, "map_cache"):
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS map_cache (
+                x INTEGER NOT NULL,
+                y INTEGER NOT NULL,
+                content_code TEXT,
+                content_type TEXT,
+                PRIMARY KEY (x, y)
+            )
+            """)
+            db.commit()
+
+            endpoint = "maps?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_maps")
-            map_list = res["data"]
-            all_maps.extend(map_list)
-            logger.debug(f"Fetched {len(map_list)} maps from page {i+1}", extra={"char": self.api.char.name})
-        
-        self.cache = {f"{item['x']}/{item['y']}": item for item in all_maps}
-        self.all_maps = all_maps
-        
-        logger.debug(f"Finished caching {len(all_maps)} maps", extra={"char": self.api.char.name})
+            pages = math.ceil(int(res["pages"]) / 100)
+            
+            logger.debug(f"Caching {pages} pages of maps", extra={"char": self.api.char.name})
+            
+            all_maps = []
+            for i in range(pages):
+                endpoint = f"maps?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_maps")
+                map_list = res["data"]
+                
+                for map_item in map_list:
+                    x = map_item['x']
+                    y = map_item['y']
+                    content_code = map_item.get('content_code', '')
+                    content_type = map_item.get('content_type', '')
+                    
+                    # Insert or replace the map into the database
+                    db.execute("""
+                    INSERT OR REPLACE INTO map_cache (x, y, content_code, content_type)
+                    VALUES (?, ?, ?, ?)
+                    """, (x, y, content_code, content_type))
+                    db.commit()
+                    
+                    all_maps.append(map_item)
+
+                logger.debug(f"Fetched {len(map_list)} maps from page {i+1}", extra={"char": self.api.char.name})
+
+            self.cache = {f"{item['x']}/{item['y']}": item for item in all_maps}
+            self.all_maps = all_maps
+
+            logger.debug(f"Finished caching {len(all_maps)} maps", extra={"char": self.api.char.name})
 
     def _filter_maps(self, map_content=None, content_type=None):
-        filtered_maps = self.all_maps
+        # Base SQL query to select all maps
+        query = "SELECT * FROM map_cache WHERE 1=1"
+        params = []
 
+        # Apply filters to the query
         if map_content:
-            content_pattern = re.compile(map_content, re.IGNORECASE)
-            filtered_maps = [map_item for map_item in filtered_maps if content_pattern.search(map_item.content_code)]
-        if content_type:
-            filtered_maps = [map_item for map_item in filtered_maps if map_item.content_type == content_type]
+            query += " AND content_code LIKE ?"
+            params.append(f"%{map_content}%")
 
-        return filtered_maps
+        if content_type:
+            query += " AND content_type = ?"
+            params.append(content_type)
+
+        # Execute the query
+        db_cursor.execute(query, params)
+        rows = db_cursor.fetchall()
+
+        # Return the filtered maps
+        return rows
 
     def get(self, x=None, y=None, **filters):
         """
@@ -1312,58 +1377,100 @@ class Monsters:
         self.all_monsters = []
 
     def _cache_monsters(self):
-        endpoint = "monsters?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_monsters")
-        pages = math.ceil(int(res["pages"]) / 100)
+        if _re_cache(self.api, "monster_cache"):
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS monster_cache (
+                code TEXT PRIMARY KEY,
+                name TEXT,
+                level INTEGER,
+                hp INTEGER,
+                attack_fire INTEGER,
+                attack_earth INTEGER,
+                attack_water INTEGER,
+                attack_air INTEGER,
+                res_fire INTEGER,
+                res_earth INTEGER,
+                res_water INTEGER,
+                res_air INTEGER,
+                min_gold INTEGER,
+                max_gold INTEGER,
+                drops TEXT
+            )
+            """)
+            db.commit()
 
-        logger.debug(f"Caching {pages} pages of monsters", extra={"char": self.api.char.name})
-
-        all_monsters = []
-        for i in range(pages):
-            endpoint = f"monsters?size=100&page={i+1}"
+            endpoint = "monsters?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_monsters")
-            monster_list = res["data"]
+            pages = math.ceil(int(res["pages"]) / 100)
 
-            all_monsters.extend([
-                Monster(
-                    name=monster["name"],
-                    code=monster["code"],
-                    level=monster["level"],
-                    hp=monster["hp"],
-                    attack_fire=monster["attack_fire"],
-                    attack_earth=monster["attack_earth"],
-                    attack_water=monster["attack_water"],
-                    attack_air=monster["attack_air"],
-                    res_fire=monster["res_fire"],
-                    res_earth=monster["res_earth"],
-                    res_water=monster["res_water"],
-                    res_air=monster["res_air"],
-                    min_gold=monster["min_gold"],
-                    max_gold=monster["max_gold"],
-                    drops=[Drop(**drop) for drop in monster["drops"]],
-                ) for monster in monster_list
-            ])
-            logger.debug(f"Fetched {len(monster_list)} monsters from page {i+1}", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of monsters", extra={"char": self.api.char.name})
 
-        self.cache = {monster.code: monster for monster in all_monsters}
-        self.all_monsters = all_monsters
+            all_monsters = []
+            for i in range(pages):
+                endpoint = f"monsters?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_monsters")
+                monster_list = res["data"]
 
-        logger.debug(f"Finished caching {len(all_monsters)} monsters", extra={"char": self.api.char.name})
+                for monster in monster_list:
+                    code = monster["code"]
+                    name = monster["name"]
+                    level = monster["level"]
+                    hp = monster["hp"]
+                    attack_fire = monster["attack_fire"]
+                    attack_earth = monster["attack_earth"]
+                    attack_water = monster["attack_water"]
+                    attack_air = monster["attack_air"]
+                    res_fire = monster["res_fire"]
+                    res_earth = monster["res_earth"]
+                    res_water = monster["res_water"]
+                    res_air = monster["res_air"]
+                    min_gold = monster["min_gold"]
+                    max_gold = monster["max_gold"]
+                    drops = json.dumps([Drop(**drop).__dict__ for drop in monster["drops"]])  # Serialize drops as JSON
 
+                    # Insert or replace the monster into the database
+                    db.execute("""
+                    INSERT OR REPLACE INTO monster_cache (
+                        code, name, level, hp, attack_fire, attack_earth, attack_water, attack_air,
+                        res_fire, res_earth, res_water, res_air, min_gold, max_gold, drops
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (code, name, level, hp, attack_fire, attack_earth, attack_water, attack_air,
+                        res_fire, res_earth, res_water, res_air, min_gold, max_gold, drops))
+                    db.commit()
+
+                    all_monsters.append(monster)
+
+                logger.debug(f"Fetched {len(monster_list)} monsters from page {i+1}", extra={"char": self.api.char.name})
+
+            self.cache = {monster["code"]: monster for monster in all_monsters}
+            self.all_monsters = all_monsters
+
+            logger.debug(f"Finished caching {len(all_monsters)} monsters", extra={"char": self.api.char.name})
+            
     def _filter_monsters(self, drop=None, max_level=None, min_level=None):
-        filtered_monsters = self.all_monsters
+        # Base SQL query to select all monsters
+        query = "SELECT * FROM monster_cache WHERE 1=1"
+        params = []
 
+        # Apply filters to the query
         if drop:
-            filtered_monsters = [
-                monster for monster in filtered_monsters 
-                if any(d['code'] == drop for d in monster.drops)
-            ]
-        if max_level is not None:
-            filtered_monsters = [monster for monster in filtered_monsters if monster.level <= max_level]
-        if min_level is not None:
-            filtered_monsters = [monster for monster in filtered_monsters if monster.level >= min_level]
+            query += " AND EXISTS (SELECT 1 FROM json_each(json_extract(monster_cache.drops, '$')) WHERE json_each.value LIKE ?)"
+            params.append(f"%{drop}%")
 
-        return filtered_monsters
+        if max_level is not None:
+            query += " AND monster_cache.level <= ?"
+            params.append(max_level)
+
+        if min_level is not None:
+            query += " AND monster_cache.level >= ?"
+            params.append(min_level)
+
+        # Execute the query
+        db_cursor.execute(query, params)
+        rows = db_cursor.fetchall()
+
+        # Return the filtered monsters
+        return rows
 
     def get(self, monster_code=None, **filters):
         """
@@ -1392,50 +1499,82 @@ class Resources:
         self.all_resources = []
 
     def _cache_resources(self):
-        endpoint = "resources?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_resources")
-        pages = math.ceil(int(res["pages"]) / 100)
+        if _re_cache(self.api, "resource_cache"):
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS resource_cache (
+                code TEXT PRIMARY KEY,
+                name TEXT,
+                skill TEXT,
+                level INTEGER,
+                drops TEXT
+            )
+            """)
+            db.commit()
 
-        logger.debug(f"Caching {pages} pages of resources", extra={"char": self.api.char.name})
-
-        all_resources = []
-        for i in range(pages):
-            endpoint = f"resources?size=100&page={i+1}"
+            endpoint = "resources?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_resources")
-            resource_list = res["data"]
+            pages = math.ceil(int(res["pages"]) / 100)
 
-            all_resources.extend([
-                Resource(
-                    name=resource["name"],
-                    code=resource["code"],
-                    skill=resource.get("skill"),
-                    level=resource["level"],
-                    drops=[Drop(**drop) for drop in resource.get("drops", [])],
-                ) for resource in resource_list
-            ])
-            logger.debug(f"Fetched {len(resource_list)} resources from page {i+1}", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of resources", extra={"char": self.api.char.name})
 
-        self.cache = {resource.code: resource for resource in all_resources}
-        self.all_resources = all_resources
+            all_resources = []
+            for i in range(pages):
+                endpoint = f"resources?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_resources")
+                resource_list = res["data"]
 
-        logger.debug(f"Finished caching {len(all_resources)} resources", extra={"char": self.api.char.name})
+                for resource in resource_list:
+                    code = resource["code"]
+                    name = resource["name"]
+                    skill = resource.get("skill")
+                    level = resource["level"]
+                    drops = json.dumps([Drop(**drop).__dict__ for drop in resource.get("drops", [])])  # Serialize drops as JSON
+
+                    # Insert or replace the resource into the database
+                    db.execute("""
+                    INSERT OR REPLACE INTO resource_cache (
+                        code, name, skill, level, drops
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """, (code, name, skill, level, drops))
+                    db.commit()
+
+                    all_resources.append(resource)
+
+                logger.debug(f"Fetched {len(resource_list)} resources from page {i+1}", extra={"char": self.api.char.name})
+
+            self.cache = {resource["code"]: resource for resource in all_resources}
+            self.all_resources = all_resources
+
+            logger.debug(f"Finished caching {len(all_resources)} resources", extra={"char": self.api.char.name})
 
     def _filter_resources(self, drop=None, max_level=None, min_level=None, skill=None):
-        filtered_resources = self.all_resources
+        # Base SQL query to select all resources
+        query = "SELECT * FROM resource_cache WHERE 1=1"
+        params = []
 
+        # Apply filters to the query
         if drop:
-            filtered_resources = [
-                resource for resource in filtered_resources 
-                if any(d['code'] == drop for d in resource.drops)
-            ]
-        if max_level is not None:
-            filtered_resources = [resource for resource in filtered_resources if resource.level <= max_level]
-        if min_level is not None:
-            filtered_resources = [resource for resource in filtered_resources if resource.level >= min_level]
-        if skill:
-            filtered_resources = [resource for resource in filtered_resources if resource.skill == skill]
+            query += " AND EXISTS (SELECT 1 FROM json_each(json_extract(resource_cache.drops, '$')) WHERE json_each.value LIKE ?)"
+            params.append(f"%{drop}%")
 
-        return filtered_resources
+        if max_level is not None:
+            query += " AND resource_cache.level <= ?"
+            params.append(max_level)
+
+        if min_level is not None:
+            query += " AND resource_cache.level >= ?"
+            params.append(min_level)
+
+        if skill:
+            query += " AND resource_cache.skill = ?"
+            params.append(skill)
+
+        # Execute the query
+        db_cursor.execute(query, params)
+        rows = db_cursor.fetchall()
+
+        # Return the filtered resources
+        return rows
 
     def get(self, resource_code=None, **filters):
         """
@@ -1465,53 +1604,105 @@ class Tasks:
         self.all_tasks = []
 
     def _cache_tasks(self):
-        endpoint = "tasks/list?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_tasks")
-        pages = math.ceil(int(res["pages"]) / 100)
+        if _re_cache(self.api, "task_cache"):
+            # Create table if it doesn't exist
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS task_cache (
+                code TEXT PRIMARY KEY,
+                level INTEGER,
+                type TEXT,
+                min_quantity INTEGER,
+                max_quantity INTEGER,
+                skill TEXT,
+                rewards TEXT
+            )
+            """)
+            db.commit()
 
-        logger.debug(f"Caching {pages} pages of tasks", extra={"char": self.api.char.name})
-
-        all_tasks = []
-        for i in range(pages):
-            endpoint = f"tasks/list?size=100&page={i+1}"
+            endpoint = "tasks/list?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_tasks")
-            task_list = res["data"]
+            pages = math.ceil(int(res["pages"]) / 100)
 
-            all_tasks.extend([
-                Task(
-                    code=task["code"],
-                    level=task["level"],
-                    type=task.get("type"),
-                    min_quantity=task["min_quantity"],
-                    max_quantity=task["max_quantity"],
-                    skill=task.get("skill"),
-                    rewards=TaskReward(
-                        items=[{"code": item["code"], "quantity": item["quantity"]} for item in task["rewards"].get("items", [])],
-                        gold=task["rewards"].get("gold", 0)
-                    ) if task.get("rewards") else None,
-                ) for task in task_list
-            ])
-            logger.debug(f"Fetched {len(task_list)} tasks from page {i+1}", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of tasks", extra={"char": self.api.char.name})
 
-        self.cache = {task.code: task for task in all_tasks}
-        self.all_tasks = all_tasks
+            all_tasks = []
+            for i in range(pages):
+                endpoint = f"tasks/list?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_tasks")
+                task_list = res["data"]
 
-        logger.debug(f"Finished caching {len(all_tasks)} tasks", extra={"char": self.api.char.name})
+                for task in task_list:
+                    code = task["code"]
+                    level = task["level"]
+                    task_type = task.get("type")
+                    min_quantity = task["min_quantity"]
+                    max_quantity = task["max_quantity"]
+                    skill = task.get("skill")
+                    rewards = json.dumps({
+                        "items": [{"code": item["code"], "quantity": item["quantity"]} for item in task["rewards"].get("items", [])],
+                        "gold": task["rewards"].get("gold", 0)
+                    }) if task.get("rewards") else None
+
+                    # Insert or replace the task into the database
+                    db.execute("""
+                    INSERT OR REPLACE INTO task_cache (
+                        code, level, type, min_quantity, max_quantity, skill, rewards
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (code, level, task_type, min_quantity, max_quantity, skill, rewards))
+                    db.commit()
+
+                    all_tasks.append(task)
+
+                logger.debug(f"Fetched {len(task_list)} tasks from page {i+1}", extra={"char": self.api.char.name})
+
+            self.cache = {task["code"]: task for task in all_tasks}
+            self.all_tasks = all_tasks
+
+            logger.debug(f"Finished caching {len(all_tasks)} tasks", extra={"char": self.api.char.name})
 
     def _filter_tasks(self, skill=None, task_type=None, max_level=None, min_level=None, name=None):
-        filtered_tasks = self.all_tasks
+        # Base SQL query to select all tasks
+        query = "SELECT * FROM task_cache WHERE 1=1"
+        params = []
 
+        # Apply filters to the query
         if skill:
-            filtered_tasks = [task for task in filtered_tasks if task.skill == skill]
+            query += " AND task_cache.skill = ?"
+            params.append(skill)
+
         if task_type:
-            filtered_tasks = [task for task in filtered_tasks if task.type == task_type]
+            query += " AND task_cache.type = ?"
+            params.append(task_type)
+
         if max_level is not None:
-            filtered_tasks = [task for task in filtered_tasks if task.level <= max_level]
+            query += " AND task_cache.level <= ?"
+            params.append(max_level)
+
         if min_level is not None:
-            filtered_tasks = [task for task in filtered_tasks if task.level >= min_level]
+            query += " AND task_cache.level >= ?"
+            params.append(min_level)
+
         if name:
-            name_pattern = re.compile(name, re.IGNORECASE)
-            filtered_tasks = [task for task in filtered_tasks if name_pattern.search(task.name)]
+            query += " AND task_cache.code LIKE ?"
+            params.append(f"%{name}%")
+
+        # Execute the query
+        db_cursor.execute(query, params)
+        rows = db_cursor.fetchall()
+
+        # Reconstruct tasks from the database rows
+        filtered_tasks = []
+        for row in rows:
+            task = Task(
+                code=row[0],
+                level=row[1],
+                type=row[2],
+                min_quantity=row[3],
+                max_quantity=row[4],
+                skill=row[5],
+                rewards=json.loads(row[6]) if row[6] else None
+            )
+            filtered_tasks.append(task)
 
         return filtered_tasks
 
@@ -1544,40 +1735,76 @@ class Rewards:
         self.all_rewards = []
 
     def _cache_rewards(self):
-        endpoint = "tasks/rewards?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
-        pages = math.ceil(int(res["pages"]) / 100)
+        if _re_cache(self.api, "reward_cache"):
+            # Create table if it doesn't exist
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reward_cache (
+                code TEXT PRIMARY KEY,
+                rate INTEGER,
+                min_quantity INTEGER,
+                max_quantity INTEGER
+            )
+            """)
+            db.commit()
 
-        logger.debug(f"Caching {pages} pages of task rewards", extra={"char": self.api.char.name})
-
-        all_rewards = []
-        for i in range(pages):
-            endpoint = f"tasks/rewards?size=100&page={i+1}"
+            endpoint = "tasks/rewards?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
-            reward_list = res["data"]
+            pages = math.ceil(int(res["pages"]) / 100)
 
-            all_rewards.extend([
-                Reward(
-                    code=reward["code"],
-                    rate=reward["rate"],
-                    min_quantity=reward["min_quantity"],
-                    max_quantity=reward["max_quantity"],
-                ) for reward in reward_list
-            ])
-            logger.debug(f"Fetched {len(reward_list)} task rewards from page {i+1}", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of task rewards", extra={"char": self.api.char.name})
 
-        self.rewards_cache = {reward.code: reward for reward in all_rewards}
-        self.all_rewards = all_rewards
+            all_rewards = []
+            for i in range(pages):
+                endpoint = f"tasks/rewards?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
+                reward_list = res["data"]
 
-        logger.debug(f"Finished caching {len(all_rewards)} task rewards", extra={"char": self.api.char.name})
+                for reward in reward_list:
+                    code = reward["code"]
+                    rate = reward["rate"]
+                    min_quantity = reward["min_quantity"]
+                    max_quantity = reward["max_quantity"]
 
+                    # Insert or replace the reward into the database
+                    db.execute("""
+                    INSERT OR REPLACE INTO reward_cache (
+                        code, rate, min_quantity, max_quantity
+                    ) VALUES (?, ?, ?, ?)
+                    """, (code, rate, min_quantity, max_quantity))
+                    db.commit()
+
+                    all_rewards.append(reward)
+
+                logger.debug(f"Fetched {len(reward_list)} task rewards from page {i+1}", extra={"char": self.api.char.name})
+
+            self.rewards_cache = {reward["code"]: reward for reward in all_rewards}
+            self.all_rewards = all_rewards
+
+            logger.debug(f"Finished caching {len(all_rewards)} task rewards", extra={"char": self.api.char.name})
 
     def _filter_rewards(self, name=None):
-        filtered_rewards = self.all_rewards
+        # Base SQL query to select all rewards
+        query = "SELECT * FROM reward_cache WHERE 1=1"
+        params = []
 
         if name:
-            name_pattern = re.compile(name, re.IGNORECASE)
-            filtered_rewards = [reward for reward in filtered_rewards if name_pattern.search(reward.name)]
+            query += " AND reward_cache.code LIKE ?"
+            params.append(f"%{name}%")
+
+        # Execute the query
+        db_cursor.execute(query, params)
+        rows = db_cursor.fetchall()
+
+        # Reconstruct rewards from the database rows
+        filtered_rewards = []
+        for row in rows:
+            reward = Reward(
+                code=row[0],
+                rate=row[1],
+                min_quantity=row[2],
+                max_quantity=row[3]
+            )
+            filtered_rewards.append(reward)
 
         return filtered_rewards
 
@@ -1621,78 +1848,107 @@ class Achievements:
         self.all_achievements = []
 
     def _cache_achievements(self):
-        endpoint = "achievements?size=1"
-        res = self.api._make_request("GET", endpoint, source="get_all_achievements")
-        pages = math.ceil(int(res["pages"]) / 100)
+        if _re_cache(self.api, "achievement_cache"):
+            # Create table if it doesn't exist
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS achievement_cache (
+                code TEXT PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                points INTEGER,
+                type TEXT,
+                target INTEGER,
+                total INTEGER,
+                rewards_gold INTEGER
+            )
+            """)
+            db.commit()
 
-        logger.debug(f"Caching {pages} pages of achievements", extra={"char": self.api.char.name})
-
-        all_achievements = []
-        for i in range(pages):
-            endpoint = f"achievements?size=100&page={i+1}"
+            endpoint = "achievements?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_achievements")
-            achievement_list = res["data"]
+            pages = math.ceil(int(res["pages"]) / 100)
 
-            all_achievements.extend([
-                Achievement(
-                    name=achievement["name"],
-                    code=achievement["code"],
-                    description=achievement["description"],
-                    points=achievement["points"],
-                    type=achievement["type"],
-                    target=achievement["target"],
-                    total=achievement["total"],
-                    rewards=AchievementReward(gold=achievement["rewards"].get("gold", 0)),
-                ) for achievement in achievement_list
-            ])
-            logger.debug(f"Fetched {len(achievement_list)} achievements from page {i+1}", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of achievements", extra={"char": self.api.char.name})
 
-        self.cache = {achievement.code: achievement for achievement in all_achievements}
-        self.all_achievements = all_achievements
+            all_achievements = []
+            for i in range(pages):
+                endpoint = f"achievements?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_achievements")
+                achievement_list = res["data"]
 
-        logger.debug(f"Finished caching {len(all_achievements)} achievements", extra={"char": self.api.char.name})
+                for achievement in achievement_list:
+                    code = achievement["code"]
+                    name = achievement["name"]
+                    description = achievement["description"]
+                    points = achievement["points"]
+                    type = achievement["type"]
+                    target = achievement["target"]
+                    total = achievement["total"]
+                    rewards_gold = achievement["rewards"].get("gold", 0)
+
+                    # Insert or replace the achievement into the database
+                    db.execute("""
+                    INSERT OR REPLACE INTO achievement_cache (
+                        code, name, description, points, type, target, total, rewards_gold
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (code, name, description, points, type, target, total, rewards_gold))
+                    db.commit()
+
+                    all_achievements.append(achievement)
+
+                logger.debug(f"Fetched {len(achievement_list)} achievements from page {i+1}", extra={"char": self.api.char.name})
+
+            self.cache = {achievement["code"]: achievement for achievement in all_achievements}
+            self.all_achievements = all_achievements
+
+            logger.debug(f"Finished caching {len(all_achievements)} achievements", extra={"char": self.api.char.name})
 
     def _filter_achievements(self, achievement_type=None, name=None, description=None, reward_type=None,
-                              reward_item=None, points_min=None, points_max=None):
-        filtered_achievements = self.all_achievements
+                            reward_item=None, points_min=None, points_max=None):
+        # Base SQL query to select all achievements
+        query = "SELECT * FROM achievement_cache WHERE 1=1"
+        params = []
 
         if achievement_type:
-            filtered_achievements = [
-                achievement for achievement in filtered_achievements
-                if achievement.type == achievement_type
-            ]
+            query += " AND achievement_cache.type = ?"
+            params.append(achievement_type)
         if name:
-            name_pattern = re.compile(name, re.IGNORECASE)
-            filtered_achievements = [
-                achievement for achievement in filtered_achievements
-                if name_pattern.search(achievement.name)
-            ]
+            query += " AND achievement_cache.name LIKE ?"
+            params.append(f"%{name}%")
         if description:
-            desc_pattern = re.compile(description, re.IGNORECASE)
-            filtered_achievements = [
-                achievement for achievement in filtered_achievements
-                if desc_pattern.search(achievement.description)
-            ]
+            query += " AND achievement_cache.description LIKE ?"
+            params.append(f"%{description}%")
         if reward_type:
-            filtered_achievements = [
-                achievement for achievement in filtered_achievements
-                if any(reward.get('type') == reward_type for reward in achievement.rewards)
-            ]
+            query += " AND EXISTS (SELECT 1 FROM reward_cache WHERE reward_cache.type = ? AND reward_cache.code IN (SELECT reward_code FROM achievement_rewards WHERE achievement_code = achievement_cache.code))"
+            params.append(reward_type)
         if reward_item:
-            filtered_achievements = [
-                achievement for achievement in filtered_achievements
-                if any(reward.get('code') == reward_item for reward in achievement.rewards)
-            ]
+            query += " AND EXISTS (SELECT 1 FROM reward_cache WHERE reward_cache.code = ? AND reward_cache.code IN (SELECT reward_code FROM achievement_rewards WHERE achievement_code = achievement_cache.code))"
+            params.append(reward_item)
         if points_min is not None:
-            filtered_achievements = [
-                achievement for achievement in filtered_achievements
-                if achievement.points >= points_min
-            ]
+            query += " AND achievement_cache.points >= ?"
+            params.append(points_min)
         if points_max is not None:
-            filtered_achievements = [
-                achievement for achievement in filtered_achievements
-                if achievement.points <= points_max
-            ]
+            query += " AND achievement_cache.points <= ?"
+            params.append(points_max)
+
+        # Execute the query
+        db_cursor.execute(query, params)
+        rows = db_cursor.fetchall()
+
+        # Reconstruct achievements from the database rows
+        filtered_achievements = []
+        for row in rows:
+            achievement = Achievement(
+                name=row[1],
+                code=row[0],
+                description=row[2],
+                points=row[3],
+                type=row[4],
+                target=row[5],
+                total=row[6],
+                rewards=AchievementReward(gold=row[7])
+            )
+            filtered_achievements.append(achievement)
 
         return filtered_achievements
 
@@ -1768,7 +2024,7 @@ class GE:
         """
         self.api = api
     # --- Grand Exchange Functions ---
-    def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1, size: int = 100) -> dict:
         """
         Retrieve the transaction history for a specific item on the Grand Exchange.
 
@@ -1781,7 +2037,7 @@ class GE:
         Returns:
             dict: Response data with the item transaction history.
         """
-        query = f"size=100&page={page}"
+        query = f"size={size}&page={page}"
         if buyer:
             query += f"&buyer={buyer}"
         if seller:
@@ -1789,7 +2045,7 @@ class GE:
         endpoint = f"grandexchange/history/{item_code}?{query}"
         return self.api._make_request("GET", endpoint, source="get_ge_history").get("data")
 
-    def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1) -> dict:
+    def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1, size: int = 100) -> dict:
         """
         Retrieve a list of sell orders on the Grand Exchange with optional filters.
 
@@ -1801,7 +2057,7 @@ class GE:
         Returns:
             dict: Response data with the list of sell orders.
         """
-        query = f"size=100&page={page}"
+        query = f"size={size}&page={page}"
         if item_code:
             query += f"&item_code={item_code}"
         if seller:
@@ -1821,7 +2077,56 @@ class GE:
         """
         endpoint = f"grandexchange/orders/{order_id}"
         return self.api._make_request("GET", endpoint, source="get_ge_sell_order").get("data")
+    
+    # --- Grand Exchange Actions Functions ---
+    def buy(self, order_id: str, quantity: int = 1) -> dict:
+        """
+        Buy an item from the Grand Exchange.
 
+        Args:
+            order_id (str): ID of the order to buy from.
+            quantity (int): Quantity of the item to buy (default is 1).
+
+        Returns:
+            dict: Response data with transaction details.
+        """
+        endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
+        json = {"id": order_id, "quantity": quantity}
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_buy")
+        return res
+
+    def sell(self, item_code: str, price: int, quantity: int = 1) -> dict:
+        """
+        Create a sell order on the Grand Exchange.
+
+        Args:
+            item_code (str): Code of the item to sell.
+            price (int): Selling price per unit.
+            quantity (int): Quantity of the item to sell (default is 1).
+
+        Returns:
+            dict: Response data confirming the sell order.
+        """
+        endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
+        json = {"code": item_code, "item_code": price, "quantity": quantity}
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_sell")
+        return res
+
+    def cancel(self, order_id: str) -> dict:
+        """
+        Cancel an active sell order on the Grand Exchange.
+
+        Args:
+            order_id (str): ID of the order to cancel.
+
+        Returns:
+            dict: Response data confirming the order cancellation.
+        """
+        endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
+        json = {"id": order_id}
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_cancel_sell")
+        return res
+    
 class Leaderboard:
     def __init__(self, api: "ArtifactsAPI"):
         """
@@ -1949,9 +2254,10 @@ class ArtifactsAPI:
 
     @with_cooldown
     def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, 
-                     source: Optional[str] = None, retries: int = 3) -> dict:
+                    source: Optional[str] = None, retries: int = 3, include_headers: bool = False) -> dict:
         """
         Makes an API request and returns the JSON response.
+        Optionally returns response headers when include_headers is True.
         Now managed by cooldown decorator.
         """
         try:
@@ -1959,7 +2265,8 @@ class ArtifactsAPI:
             url = f"{self.base_url}/{endpoint}"
             if source != "get_character":
                 self.logger.debug(f"Sending API request to {url} with the following json:\n{json}", extra={"char": self.character_name})
-            response = requests.request(method, url, headers=self.headers, json=json)
+
+            response = requests.request(method, url, headers=self.headers, json=json, timeout=10)
 
             if response.status_code != 200:
                 message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')} Endpoint: {endpoint}"
@@ -1970,17 +2277,36 @@ class ArtifactsAPI:
 
             if source != "get_character":
                 self.get_character()
-                
+            
+            # Return headers if the flag is set
+            if include_headers:
+                return {
+                    "json": response.json(),
+                    "headers": dict(response.headers)
+                }
+
             return response.json()
 
         except Exception as e:
-            if not "Character already at destination" in str(e):
+            if "Character already at destination" not in str(e):
                 if retries:
                     retries -= 1
                     logger.warning(f"Retrying, {retries} retries left", extra={"char": self.character_name})
-                    return self._make_request(method, endpoint, json, source, retries)
+                    return self._make_request(method, endpoint, json, source, retries, include_headers)
 
-
+    def _get_version(self):
+        version = self._make_request(endpoint="", method="GET").get("data").get("version")
+        return version
+    
+    def _cache(self):
+        self.maps._cache_maps()
+        self.items._cache_items()
+        self.monsters._cache_monsters()
+        self.resources._cache_resources()
+        self.tasks._cache_tasks()
+        self.task_rewards._cache_rewards()
+        self.achievments._cache_achievements()
+        
     def _raise(self, code: int, m: str) -> None:
         """
         Raises an API exception based on the response code and error message.
@@ -2151,4 +2477,16 @@ class ArtifactsAPI:
             inventory=player_inventory
         )
         return self.char
+    
+if __name__ == '__main__':
+    TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImFycC5wdXRsYW5kQGdtYWlsLmNvbSIsInBhc3N3b3JkX2NoYW5nZWQiOiIifQ.SyznCcPjJiBQoAOvOPJvZ8w4P7YT64ekgQ--twTI45s'  # Replace with your actual token
+    CHARACTER = "Vee5"
+    
+    logger.setLevel(logging.DEBUG)
+    
+    api = ArtifactsAPI(TOKEN, CHARACTER)
+    
+    items = Items(api)
+    
+    api._cache()
     

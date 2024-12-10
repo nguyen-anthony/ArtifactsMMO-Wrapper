@@ -2477,16 +2477,3 @@ class ArtifactsAPI:
             inventory=player_inventory
         )
         return self.char
-    
-if __name__ == '__main__':
-    TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJlbWFpbCI6ImFycC5wdXRsYW5kQGdtYWlsLmNvbSIsInBhc3N3b3JkX2NoYW5nZWQiOiIifQ.SyznCcPjJiBQoAOvOPJvZ8w4P7YT64ekgQ--twTI45s'  # Replace with your actual token
-    CHARACTER = "Vee5"
-    
-    logger.setLevel(logging.DEBUG)
-    
-    api = ArtifactsAPI(TOKEN, CHARACTER)
-    
-    items = Items(api)
-    
-    api._cache()
-    

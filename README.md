@@ -1,5 +1,8 @@
 # ArtifactsMMO API Wrapper
-[![Upload Python Package](https://github.com/Veillax/ArtifactsMMO-Wrapper/actions/workflows/python-publish.yml/badge.svg)](https://github.com/Veillax/ArtifactsMMO-Wrapper/actions/workflows/python-publish.yml)
+![PyPI - Version](https://img.shields.io/pypi/v/artifactsmmo-wrapper?label=Version)
+![PyPI - License](https://img.shields.io/pypi/l/artifactsmmo-wrapper?label=License)
+![GitHub Release Date](https://img.shields.io/github/release-date/Veillax/ArtifactsMMO-Wrapper?label=Release%20Date)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/artifactsmmo-wrapper?label=Downloads)
 ## Disclaimer
 
 This wrapper is a third-party tool and is not officially affiliated with Artifacts MMO. Use it responsibly and at your own risk. Be aware of the game's terms of service and avoid any actions that could violate them.
@@ -54,6 +57,7 @@ For another quick start, you can write your own Javascript scripts directly in t
 
 ## Before You Begin
 The first step is to [create your account](https://artifactsmmo.com/account/create) and your first character [by logging in](https://artifactsmmo.com/account/characters). After that you'll need your token, which you can find [on your account](https://artifactsmmo.com/account/).
+**⚠️ It is not allowed to play with more than one account. All accounts involved in multi-accounting will be banned **
 
 ![API Token Box](https://artifactsmmo.com/images/docs/token.png)
 

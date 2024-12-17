@@ -160,3 +160,4 @@ cython_debug/
 # Custom
 dev/
 src/artifactsmmo_wrapper/artifacts.db
+.vscode/

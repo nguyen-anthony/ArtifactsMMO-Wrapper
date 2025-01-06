@@ -3,7 +3,7 @@ from .helpers import _re_cache
 import math
 import json
 from typing import Optional
-from .data import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, AchievementReward
+from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, AchievementReward
 
 class Account:
     def __init__(self, api: "ArtifactsAPI"):

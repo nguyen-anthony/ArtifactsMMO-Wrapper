@@ -1,4 +1,4 @@
-from .data import PlayerData, ContentMaps, InventoryItem, Position
+from .game_data_classes import PlayerData, ContentMaps, InventoryItem, Position
 from .exceptions import APIException
 from .helpers import CooldownManager, with_cooldown
 from .subclasses import Account, Character, Actions, Maps, Items, Monsters, Resources, Events, GE, Tasks, Rewards, Achievements, Leaderboard, Accounts

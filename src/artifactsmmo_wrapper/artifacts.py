@@ -1,39 +1,22 @@
-from .game_data_classes import PlayerData, ContentMaps, InventoryItem, Position
-from .exceptions import APIException
-from .helpers import CooldownManager, with_cooldown
-from .subclasses import Account, Character, Actions, Maps, Items, Monsters, Resources, Events, GE, Tasks, Rewards, Achievements, Leaderboard, Accounts
-
 import requests
 import logging
-import sqlite3
 import time
 from threading import Thread
 from datetime import timedelta, datetime
 from typing import List, Dict, Optional
 
-logger = logging.getLogger(__name__)
+from .game_data_classes import PlayerData, ContentMaps, InventoryItem, Position
+from .exceptions import APIException
+from .helpers import CooldownManager, with_cooldown
+from .subclasses import Account, Character, Actions, Maps, Items, Monsters, Resources, Events, GE, Tasks, Rewards, Achievements, Leaderboard, Accounts
+from .log import logger
+from .database import cache_db_cursor, cache_db
 
-# Define the logging format you want to apply
-formatter = logging.Formatter(
-    fmt="\33[34m[%(levelname)s] %(asctime)s - %(char)s:\33[0m %(message)s", 
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-
-# Create a handler (e.g., StreamHandler for console output) and set its format
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-
-logger.addHandler(console_handler)
 
 # --- Globals ---
 _task_loops = []
 
 
-# --- Database Loading ---
-cache_db = sqlite3.connect('db/artifacts.db')
-cache_db_cursor = cache_db.cursor()
-cache_db_cursor.execute("CREATE TABLE IF NOT EXISTS cache_table (k TEXT PRIMARY KEY, v TEXT)")
-cache_db.commit()
 
 # --- Wrapper ---
 class ArtifactsAPI:
@@ -41,6 +24,9 @@ class ArtifactsAPI:
         extra = {"char": character_name}
         self.logger = logging.LoggerAdapter(logger, extra)
 
+        cache_thread = Thread(target=self._run_periodic_cache, args=(86400,), daemon=True)
+        cache_thread.start()
+        
         self.logger.debug("Instantiating wrapper for " + character_name, extra = {"char": character_name})
 
         self.token: str = api_key
@@ -76,6 +62,21 @@ class ArtifactsAPI:
         self.content_maps = ContentMaps(self)
 
         self.logger.debug("Finished instantiating wrapper for " + character_name, extra = {"char": character_name})
+
+    def _run_periodic_cache(self, interval: int):
+        """
+        Runs the `_cache` method periodically at the given interval in seconds.
+
+        Args:
+            interval (int): Time interval in seconds between cache checks.
+        """
+        while True:
+            try:
+                self._cache()
+            except Exception as e:
+                self.logger.warning(f"Cache update failed: {str(e)}", extra={"char": "ROOT"})
+            time.sleep(interval)
+
 
     @with_cooldown
     def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, 
@@ -118,24 +119,6 @@ class ArtifactsAPI:
                     retries -= 1
                     logger.warning(f"Retrying, {retries} retries left", extra={"char": self.character_name})
                     return self._make_request(method, endpoint, json, source, retries, include_headers)
-
-    def _start_task_loop(self, function, timeout):
-        func, timeout, _ = _task_loops if not [None, 0, None] in _task_loops else None, 0, None
-        while func is not None:
-            function()
-            time.sleep(timeout)
-        
-    def _set_task_loop(self, function= None, timeout = None, thread = None):
-        try:
-            func, timeout, _ = _task_loops if not [None, 0, None] in _task_loops else None, 0, None
-            if not func == function:
-                task_thread = Thread(target=self._start_task_loop, args=[function, timeout])
-                
-                task_thread.start()
-        except:
-            task_thread = Thread(target=_task_loops, args=[function, timeout])
-            task_thread.start()
-
             
 
     def _get_version(self):
@@ -143,13 +126,14 @@ class ArtifactsAPI:
         return version
     
     def _cache(self):
-        cache_db_cursor.execute("SELECT v FROM cache_table WHERE k = Cache Expiration")
+        cache_db_cursor.execute("SELECT v FROM cache_table WHERE k = 'Cache Expiration'")
         cache_expiration = cache_db_cursor.fetchone() or None
         now = datetime.now()
-        
-        if cache_expiration < now or cache_expiration is None:
+                
+        if cache_expiration is None or datetime.strptime(cache_expiration[0], '%Y-%m-%d %H:%M:%S.%f') < now:
             cache_db_cursor.execute("INSERT or REPLACE INTO cache_table (k, v) VALUES (?, ?)", ("Cache Expiration", datetime.now() + timedelta(days=2)))
             cache_db.commit()
+            print("Recached the following cache tables:")
             self.maps._cache_maps()
             self.items._cache_items()
             self.monsters._cache_monsters()

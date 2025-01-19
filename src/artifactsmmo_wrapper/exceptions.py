@@ -1,4 +1,4 @@
-from .artifacts import logger
+from .log import logger
 
 # --- Exceptions ---
 class APIException(Exception):

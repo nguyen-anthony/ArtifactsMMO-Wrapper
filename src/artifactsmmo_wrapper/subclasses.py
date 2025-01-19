@@ -1,12 +1,14 @@
-from .artifacts import ArtifactsAPI, cache_db_cursor, cache_db, logger
+from .database import cache_db_cursor, cache_db
 from .helpers import _re_cache
 import math
 import json
 from typing import Optional
 from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, AchievementReward
+from .log import logger
 
 class Account:
-    def __init__(self, api: "ArtifactsAPI"):
+    
+    def __init__(self, api):
         """
         Initialize with a reference to the main API to access shared methods.
 
@@ -52,7 +54,7 @@ class Account:
         return self.api._make_request("GET", endpoint, source="get_account_details")
 
 class Character:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         """
         Initialize with a reference to the main API to access shared methods.
 
@@ -105,7 +107,7 @@ class Character:
         self.api._make_request("GET", endpoint, source="get_logs")
 
 class Actions:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         """
         Initialize with a reference to the main API to access shared methods.
 
@@ -532,7 +534,7 @@ class Items:
         return self._filter_items(**filters)
 
 class Maps:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         self.api = api
         self.cache = {}
         self.all_maps = []
@@ -626,7 +628,7 @@ class Maps:
         return self._filter_maps(**filters)
 
 class Monsters:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         self.api = api
         self.cache = {}
         self.all_monsters = []
@@ -748,7 +750,7 @@ class Monsters:
         return self._filter_monsters(**filters)
 
 class Resources:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         self.api = api
         self.cache = {}
         self.all_resources = []
@@ -853,7 +855,7 @@ class Resources:
         return self._filter_resources(**filters)
 
 class Tasks:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         self.api = api
         self.cache = {}
         self.all_tasks = []
@@ -984,7 +986,7 @@ class Tasks:
         return self._filter_tasks(**filters)
 
 class Rewards:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         self.api = api
         self.cache = {}
         self.all_rewards = []
@@ -1097,7 +1099,7 @@ class Rewards:
             return reward
 
 class Achievements:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         self.api = api
         self.cache = {}
         self.all_achievements = []
@@ -1232,7 +1234,7 @@ class Achievements:
         return self._filter_achievements(**filters)
 
 class Events:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         """
         Initialize with a reference to the main API to access shared methods.
 
@@ -1270,7 +1272,7 @@ class Events:
         return self.api._make_request("GET", endpoint, source="get_all_events").get("data")
 
 class GE:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         """
         Initialize with a reference to the main API to access shared methods.
 
@@ -1383,7 +1385,7 @@ class GE:
         return res
     
 class Leaderboard:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         """
         Initialize with a reference to the main API to access shared methods.
 
@@ -1429,7 +1431,7 @@ class Leaderboard:
         return self.api._make_request("GET", endpoint, source="get_accounts_leaderboard")
 
 class Accounts:
-    def __init__(self, api: "ArtifactsAPI"):
+    def __init__(self, api):
         """
         Initialize with a reference to the main API to access shared methods.
 

@@ -1,4 +1,4 @@
-from .artifacts import cache_db_cursor, cache_db
+from .database import cache_db_cursor, cache_db
 import time
 from datetime import timezone, datetime
 from threading import Lock

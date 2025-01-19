@@ -1,6 +1,6 @@
-from .artifacts import logger, ArtifactsAPI
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
+from .log import logger
 
 # --- Dataclasses ---
 # --- Utility ---
@@ -158,8 +158,10 @@ class Achievement:
 
 @dataclass
 class ContentMaps:
-    api: "ArtifactsAPI"
     maps: Dict[str, ContentMap] = field(init=False, default_factory=dict)
+
+    def __init__(self, api):
+        self.api = api
 
     def __post_init__(self):
         self._cache_content_maps()

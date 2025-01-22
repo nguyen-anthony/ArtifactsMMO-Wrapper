@@ -11,6 +11,8 @@ This wrapper is a third-party tool and is not officially affiliated with Artifac
 
 ## Overview
 
+Hello! Glad you stumbled onto this wrapper. This is by far my biggest undertaking yet, and it only gets bigger. 
+
 This is a Python wrapper for interacting with the Artifacts MMO API, providing an easy way to interact with the game's data, perform in-game actions, and manage character and account information. This library simplifies API requests and provides a range of features to integrate with Artifacts MMO's online functionalities.
 
 ### Features
@@ -21,7 +23,7 @@ This is a Python wrapper for interacting with the Artifacts MMO API, providing a
 
 - **Task Management**: Accept, complete, and exchange tasks from the taskmaster.
 
-- **Grand Exchange**: Manage buy and sell orders, view order history.
+- **Grand Exchange**: Manage and fulfill sell orders and view order history
 
 - **Inventory and Equipment Management**: View, equip, and manage items.
 
@@ -58,7 +60,7 @@ pip install .
 
 ### Quick Disclaimer
 
-Some of the following text is taken from the ArtifactsMMO Website to ensure it is accurate and well put for newcommers to be able to understand. It is adapted to match the information available within this wrapper though
+Some of the following text is taken from the ArtifactsMMO Website to ensure it is accurate and well put for beginner developers or new players to be able to understand. It is adapted to match the information available within this wrapper though
 
 ## How to begin playing ArtifactsMMO
 
@@ -83,12 +85,15 @@ The first step is to [create your account](https://artifactsmmo.com/account/crea
 
 You can now open the game client by [clicking here](https://artifactsmmo.com/client).
 
+**The built in editor supports Node.JS only. It is recommended to use VS Code or Pycharm with this wrapper**
+
 **Ready to start?**
 
 Visit [ArtifactsMMO Wrapper on PyPi](https://pypi.org/project/artifactsmmo-wrapper/) to view the python package
 
 ## Links
 
+[Wrapper Tutorials, Examples, and Specs](http://docs.veillax.com/docs/artifactsmmo-wrapper/)
 [ArtifactsMMO Website](https://artifactsmmo.com/)  
 [ArtifactsMMO Discord](https://discord.com/invite/prEBQ8a6Vs)  
 [ArtifactsMMO Docs](https://docs.artifactsmmo.com/)  

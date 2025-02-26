@@ -272,7 +272,6 @@ class ArtifactsAPI:
             max_hp=data["max_hp"],
             haste=data["haste"],
             critical_strike=data["critical_strike"],
-            stamina=data["stamina"],
             attack_fire=data["attack_fire"],
             attack_earth=data["attack_earth"],
             attack_water=data["attack_water"],
@@ -309,6 +308,12 @@ class ArtifactsAPI:
             task_progress=data["task_progress"],
             task_total=data["task_total"],
             inventory_max_items=data["inventory_max_items"],
-            inventory=player_inventory
+            inventory=player_inventory,
+            wisdom=data["wisdom"],
+            prospecting=data["prospecting"],
+            dmg=data["dmg"],
+            rune_slot=data["rune_slot"],
+            bag_slot=data["bag_slot"]
+            
         )
         return self.char

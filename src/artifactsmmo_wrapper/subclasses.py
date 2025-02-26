@@ -157,6 +157,7 @@ class Actions:
         Returns:
             dict: Response data with updated equipment.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/equip"
         json = {"code": item_code, "slot": slot, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="equip_item")
@@ -173,6 +174,7 @@ class Actions:
         Returns:
             dict: Response data with updated equipment.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/unequip"
         json = {"slot": slot, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="unequip_item")
@@ -189,6 +191,7 @@ class Actions:
         Returns:
             dict: Response data confirming the item use.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/use"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="use_item")
@@ -244,6 +247,7 @@ class Actions:
         Returns:
             dict: Response data with crafted item details.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/crafting"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="craft_item")
@@ -260,6 +264,7 @@ class Actions:
         Returns:
             dict: Response data confirming the recycling action.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/recycle"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="recycle_item")
@@ -277,6 +282,7 @@ class Actions:
         Returns:
             dict: Response data confirming the deposit.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/deposit"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_item")
@@ -292,6 +298,7 @@ class Actions:
         Returns:
             dict: Response data confirming the deposit.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/gold"
         json = {"quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_gold")
@@ -308,6 +315,7 @@ class Actions:
         Returns:
             dict: Response data confirming the withdrawal.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_item")
@@ -323,6 +331,7 @@ class Actions:
         Returns:
             dict: Response data confirming the withdrawal.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/gold"
         json = {"quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_gold")
@@ -385,6 +394,7 @@ class Actions:
         Returns:
             dict: Response data confirming task trade.
         """
+        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/tasks/trade"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="trade_task")
@@ -1233,6 +1243,145 @@ class Achievements:
             return self.cache.get(achievement_code)
         return self._filter_achievements(**filters)
 
+class Effects:
+    def __init__(self, api):
+        self.api = api
+        self.cache = {}
+        self.all_effects = []
+
+    def _cache_effects(self):
+        """
+        Fetches all effects from the API and caches them in a local SQLite database.
+        """
+        global cache_db, cache_db_cursor
+
+        # Check if the cache needs to be refreshed
+        if _re_cache(self.api, "effects_cache"):
+            # Create the effects_cache table if it doesn't exist
+            cache_db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS effects_cache (
+                code TEXT PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                attributes TEXT
+            )
+            """)
+            cache_db.commit()
+
+            # Fetch all effects from the API
+            endpoint = "effects?size=1"
+            res = self.api._make_request("GET", endpoint, source="get_all_effects")
+            total_pages = math.ceil(int(res["pages"]) / 100)
+
+            logger.debug(f"Caching {total_pages} pages of effects", extra={"char": self.api.char.name})
+
+            all_effects = []
+            for i in range(total_pages):
+                endpoint = f"effects?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_effects")
+                effect_list = res["data"]
+
+                for effect in effect_list:
+                    code = effect["code"]
+                    name = effect["name"]
+                    description = effect.get("description", "")
+                    attributes = json.dumps(effect.get("attributes", {}))  # Serialize attributes as JSON
+
+                    # Insert or replace the effect into the database
+                    cache_db.execute("""
+                    INSERT OR REPLACE INTO effects_cache (
+                        code, name, description, attributes
+                    ) VALUES (?, ?, ?, ?)
+                    """, (code, name, description, attributes))
+                    cache_db.commit()
+
+                    all_effects.append(effect)
+
+                logger.debug(f"Fetched {len(effect_list)} effects from page {i+1}", extra={"char": self.api.char.name})
+
+            self.cache = {effect["code"]: effect for effect in all_effects}
+            self.all_effects = all_effects
+
+            logger.debug(f"Finished caching {len(all_effects)} effects", extra={"char": self.api.char.name})
+
+    def _filter_effects(self, name=None, attribute_key=None, attribute_value=None):
+        """
+        Filters effects based on provided criteria.
+
+        Args:
+            name (str, optional): Filter effects by name.
+            attribute_key (str, optional): Filter effects that have a specific attribute key.
+            attribute_value (str, optional): Filter effects where a specific attribute key has a specific value.
+
+        Returns:
+            list: A list of filtered effects.
+        """
+        global cache_db_cursor
+
+        # Base SQL query to select all effects
+        query = "SELECT * FROM effects_cache WHERE 1=1"
+        params = []
+
+        # Apply filters to the query
+        if name:
+            query += " AND name LIKE ?"
+            params.append(f"%{name}%")
+
+        if attribute_key and attribute_value:
+            query += """
+            AND EXISTS (
+                SELECT 1 FROM json_each(attributes)
+                WHERE json_each.key = ? AND json_each.value = ?
+            )
+            """
+            params.append(attribute_key)
+            params.append(attribute_value)
+        elif attribute_key:
+            query += """
+            AND EXISTS (
+                SELECT 1 FROM json_each(attributes)
+                WHERE json_each.key = ?
+            )
+            """
+            params.append(attribute_key)
+
+        # Execute the query
+        cache_db_cursor.execute(query, params)
+        rows = cache_db_cursor.fetchall()
+
+        # Convert rows to dictionaries
+        filtered_effects = []
+        for row in rows:
+            effect = {
+                "code": row[0],
+                "name": row[1],
+                "description": row[2],
+                "attributes": json.loads(row[3])  # Deserialize attributes from JSON
+            }
+            filtered_effects.append(effect)
+
+        return filtered_effects
+
+    def get(self, effect_code=None, **filters):
+        """
+        Retrieves a specific effect or filters effects based on provided parameters.
+
+        Args:
+            effect_code (str, optional): Retrieve effect by its unique code.
+            **filters: Optional filter parameters. Supported filters:
+                - name: Filter effects by name.
+                - attribute_key: Filter effects that have a specific attribute key.
+                - attribute_value: Filter effects where a specific attribute key has a specific value.
+
+        Returns:
+            dict or list: A single effect if effect_code is provided, else a filtered list of effects.
+        """
+        if not self.all_effects:
+            self._cache_effects()
+        if effect_code:
+            return self.cache.get(effect_code)
+        return self._filter_effects(**filters)
+    
 class Events:
     def __init__(self, api):
         """

@@ -337,13 +337,13 @@ class PlayerData:
     max_hp: int
     haste: int
     critical_strike: int
-    stamina: int
     
     # Elemental attributes
     attack_fire: int
     attack_earth: int
     attack_water: int
     attack_air: int
+    dmg: int
     dmg_fire: int
     dmg_earth: int
     dmg_water: int
@@ -375,6 +375,12 @@ class PlayerData:
     utility1_slot_quantity: int
     utility2_slot: str
     utility2_slot_quantity: int
+    rune_slot: str
+    bag_slot: str
+    
+    # Modifiers
+    wisdom: int
+    prospecting: int
     
     # Task information
     task: str

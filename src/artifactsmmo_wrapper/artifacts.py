@@ -23,9 +23,6 @@ class ArtifactsAPI:
     def __init__(self, api_key: str, character_name: str):
         extra = {"char": character_name}
         self.logger = logging.LoggerAdapter(logger, extra)
-
-        cache_thread = Thread(target=self._run_periodic_cache, args=(86400,), daemon=True)
-        cache_thread.start()
         
         self.logger.debug("Instantiating wrapper for " + character_name, extra = {"char": character_name})
 
@@ -62,20 +59,6 @@ class ArtifactsAPI:
         self.content_maps = ContentMaps(self)
 
         self.logger.debug("Finished instantiating wrapper for " + character_name, extra = {"char": character_name})
-
-    def _run_periodic_cache(self, interval: int):
-        """
-        Runs the `_cache` method periodically at the given interval in seconds.
-
-        Args:
-            interval (int): Time interval in seconds between cache checks.
-        """
-        while True:
-            try:
-                self._cache()
-            except Exception as e:
-                self.logger.warning(f"Cache update failed: {str(e)}", extra={"char": "ROOT"})
-            time.sleep(interval)
 
 
     @with_cooldown

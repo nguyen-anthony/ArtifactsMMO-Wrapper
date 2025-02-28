@@ -8,15 +8,116 @@ from typing import List, Dict, Optional
 from .game_data_classes import PlayerData, ContentMaps, InventoryItem, Position
 from .exceptions import APIException
 from .helpers import CooldownManager, with_cooldown
-from .subclasses import Account, Character, Actions, Maps, Items, Monsters, Resources, Events, GE, Tasks, Rewards, Achievements, Leaderboard, Accounts
+from .subclasses import (
+    Account, Character, Actions, Maps, Items, 
+    Monsters, Resources, Tasks, Rewards, Achievements, 
+    BaseCache
+)
 from .log import logger
-from .database import cache_db_cursor, cache_db
+from .database import cache_db, cache_db_cursor
 from .config import config
 
 
 # --- Globals ---
 _task_loops = []
 
+
+# --- Additional Classes ---
+class Events:
+    def __init__(self, api):
+        self.api = api
+    
+    def get_active(self, page: int = 1) -> dict:
+        query = f"size=100&page={page}"
+        endpoint = f"events/active?{query}"
+        return self.api._make_request("GET", endpoint, source="get_active_events").get("data")
+
+    def get_all(self, page: int = 1) -> dict:
+        query = f"size=100&page={page}"
+        endpoint = f"events?{query}"
+        return self.api._make_request("GET", endpoint, source="get_all_events").get("data")
+
+class GE:
+    def __init__(self, api):
+        self.api = api
+    
+    def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1, size: int = 100) -> dict:
+        query = f"size={size}&page={page}"
+        if buyer:
+            query += f"&buyer={buyer}"
+        if seller:
+            query += f"&seller={seller}"
+        endpoint = f"grandexchange/history/{item_code}?{query}"
+        return self.api._make_request("GET", endpoint, source="get_ge_history").get("data")
+
+    def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1, size: int = 100) -> dict:
+        query = f"size={size}&page={page}"
+        if item_code:
+            query += f"&item_code={item_code}"
+        if seller:
+            query += f"&seller={seller}"
+        endpoint = f"grandexchange/orders?{query}"
+        return self.api._make_request("GET", endpoint, source="get_ge_sell_orders").get("data")
+
+    def get_sell_order(self, order_id: str) -> dict:
+        endpoint = f"grandexchange/orders/{order_id}"
+        return self.api._make_request("GET", endpoint, source="get_ge_sell_order").get("data")
+    
+    def buy(self, order_id: str, quantity: int = 1) -> dict:
+        endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
+        json = {"id": order_id, "quantity": quantity}
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_buy")
+        return res
+
+    def sell(self, item_code: str, price: int, quantity: int = 1) -> dict:
+        endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
+        json = {"code": item_code, "item_code": price, "quantity": quantity}
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_sell")
+        return res
+
+    def cancel(self, order_id: str) -> dict:
+        endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
+        json = {"id": order_id}
+        res = self.api._make_request("POST", endpoint, json=json, source="ge_cancel_sell")
+        return res
+
+class Leaderboard:
+    def __init__(self, api):
+        self.api = api
+    
+    def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+        query = "size=100"
+        if sort:
+            query += f"&sort={sort}"
+        query += f"&page={page}"
+        endpoint = f"leaderboard/characters?{query}"
+        return self.api._make_request("GET", endpoint, source="get_characters_leaderboard")
+
+    def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+        query = "size=100"
+        if sort:
+            query += f"&sort={sort}"
+        query += f"&page={page}"
+        endpoint = f"leaderboard/accounts?{query}"
+        return self.api._make_request("GET", endpoint, source="get_accounts_leaderboard")
+
+class Accounts:
+    def __init__(self, api):
+        self.api = api
+    
+    def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:
+        query = "size=100"
+        if completed is not None:
+            query += f"&completed={str(completed).lower()}"
+        if achievement_type:
+            query += f"&achievement_type={achievement_type}"
+        query += f"&page={page}"
+        endpoint = f"/accounts/{account}/achievements?{query}"
+        return self.api._make_request("GET", endpoint, source="get_account_achievements")
+
+    def get_account(self, account: str):
+        endpoint = f"/acounts/{account}"
+        return self.api._make_request("GET", endpoint, source="get_account")
 
 
 # --- Wrapper ---
@@ -136,9 +237,12 @@ class ArtifactsAPI:
         cache_db_cursor.execute("SELECT v FROM cache_table WHERE k = 'Cache Expiration'")
         cache_expiration = cache_db_cursor.fetchone() or None
         now = datetime.now()
-                
+            
         if cache_expiration is None or datetime.strptime(cache_expiration[0], '%Y-%m-%d %H:%M:%S.%f') < now:
-            cache_db_cursor.execute("INSERT or REPLACE INTO cache_table (k, v) VALUES (?, ?)", ("Cache Expiration", datetime.now() + timedelta(days=2)))
+            cache_db_cursor.execute(
+                "INSERT or REPLACE INTO cache_table (k, v) VALUES (?, ?)", 
+                ("Cache Expiration", datetime.now() + timedelta(days=2))
+            )
             cache_db.commit()
             print("Recached the following cache tables:")
             self.maps._cache_maps()
@@ -147,8 +251,8 @@ class ArtifactsAPI:
             self.resources._cache_resources()
             self.tasks._cache_tasks()
             self.task_rewards._cache_rewards()
-            self.achievments._cache_achievements()
-        
+            self.achievements._cache_achievements()
+
     def _raise(self, code: int, m: str) -> None:
         """
         Raises an API exception based on the response code and error message.

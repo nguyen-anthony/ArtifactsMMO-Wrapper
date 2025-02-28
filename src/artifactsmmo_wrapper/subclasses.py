@@ -1,10 +1,11 @@
-from .database import cache_db_cursor, cache_db
+from .database import cache_db, cache_db_cursor
 from .helpers import _re_cache
 import math
 import json
 from typing import Optional, List, Dict, Any, Union
 from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect
 from .log import logger
+import sqlite3
 
 class Account:
     
@@ -416,12 +417,12 @@ class BaseCache:
     
     def _row_to_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
         """Convert a database row to a dictionary."""
-        return dict(zip(row.keys(), row))
+        return dict(row)
 
 class Items(BaseCache):
     """Manages item-related operations and caching."""
     
-    def __init__(self, api: 'ArtifactsAPI') -> None:
+    def __init__(self, api) -> None:
         """
         Initialize Items manager.
         
@@ -432,24 +433,22 @@ class Items(BaseCache):
         self._cache_items()
     
     def _cache_items(self):
-        
         if _re_cache(self.api, "item_cache"):
-            cache_db_cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS item_cache  (
-                name TEXT PRIMARY KEY,
-                code TEXT,
-                type TEXT,
-                subtype TEXT,
-                description TEXT,
-                effects TEXT,
-                craft TEXT,
-                tradeable BOOL
+            # Create table
+            cache_db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS item_cache (
+            name TEXT PRIMARY KEY,
+            code TEXT,
+            type TEXT,
+            subtype TEXT,
+            description TEXT,
+            effects TEXT,
+            craft TEXT,
+            tradeable BOOL
             )
-            """
-            )
+            """)
             cache_db.commit()
-                    
+                
             endpoint = "items?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_items")
             pages = math.ceil(int(res["pages"]) / 100)
@@ -462,27 +461,27 @@ class Items(BaseCache):
                 res = self.api._make_request("GET", endpoint, source="get_all_items", include_headers=True)
                 item_list = res["json"]["data"]
 
-
                 for item in item_list:
                     name = item["name"]
                     code = item["code"]
                     type_ = item["type"]
                     subtype = item.get("subtype", "")
                     description = item.get("description", "")
-                    effects = json.dumps(item.get("effects", []))  # Serialize the effects as JSON
-                    craft = json.dumps(item["craft"]) if item.get("craft") else None  # Serialize craft if available
+                    effects = json.dumps(item.get("effects", []))
+                    craft = json.dumps(item["craft"]) if item.get("craft") else None
                     tradeable = item.get("tradeable", False)
 
                     # Insert the item into the database
-                    cache_db.execute("""
-                    INSERT OR REPLACE INTO item_cache (name, code, type, subtype, description, effects, craft, tradeable)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    cache_db_cursor.execute("""
+                        INSERT OR REPLACE INTO item_cache (
+                            name, code, type, subtype, description, effects, craft, tradeable
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (name, code, type_, subtype, description, effects, craft, tradeable))
                     
-                    cache_db.commit()
+                    all_items.append(item)
 
-
-            self.cache = {item.code: item for item in all_items}
+            cache_db.commit()
+            self.cache = {item["code"]: item for item in all_items}
             self.all_items = all_items
 
             logger.debug(f"Finished caching {len(all_items)} items", extra={"char": self.api.char.name})
@@ -517,8 +516,7 @@ class Items(BaseCache):
             params.append(item_type)
 
         cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-        return rows
+        return cache_db_cursor.fetchall()
 
     def get(self, 
             code: Optional[str] = None, 
@@ -543,7 +541,7 @@ class Items(BaseCache):
             if row is None:
                 return None
             
-            row_dict = self._row_to_dict(row)
+            row_dict = dict(row)
             # Convert JSON strings
             if row_dict['effects']:
                 row_dict['effects'] = [Effect(**effect) for effect in json.loads(row_dict['effects'])]
@@ -552,9 +550,9 @@ class Items(BaseCache):
             
             return Item(**row_dict)
         
-        return [Item(**self._row_to_dict(row)) for row in self._filter_items(**filters)]
+        return [Item(**dict(row)) for row in self._filter_items(**filters)]
 
-class Maps:
+class Maps(BaseCache):
     def __init__(self, api):
         self.api = api
         self.cache = {}
@@ -562,6 +560,7 @@ class Maps:
 
     def _cache_maps(self):
         if _re_cache(self.api, "map_cache"):
+            # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS map_cache (
                 x INTEGER NOT NULL,
@@ -592,16 +591,14 @@ class Maps:
                     content_type = map_item.get('content_type', '')
                     
                     # Insert or replace the map into the database
-                    cache_db.execute("""
+                    cache_db_cursor.execute("""
                     INSERT OR REPLACE INTO map_cache (x, y, content_code, content_type)
                     VALUES (?, ?, ?, ?)
                     """, (x, y, content_code, content_type))
-                    cache_db.commit()
                     
                     all_maps.append(map_item)
 
-                logger.debug(f"Fetched {len(map_list)} maps from page {i+1}", extra={"char": self.api.char.name})
-
+            cache_db.commit()
             self.cache = {f"{item['x']}/{item['y']}": item for item in all_maps}
             self.all_maps = all_maps
 
@@ -612,16 +609,15 @@ class Maps:
         params = []
 
         if content_code:
-                query += " AND content_code LIKE ?"
+            query += " AND content_code LIKE ?"
             params.append(f"%{content_code}%")
 
-            if content_type:
-                query += " AND content_type = ?"
-                params.append(content_type)
+        if content_type:
+            query += " AND content_type = ?"
+            params.append(content_type)
 
         cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-        return rows
+        return cache_db_cursor.fetchall()
 
     def get(self, x=None, y=None, **filters):
         """
@@ -644,12 +640,7 @@ class Maps:
             row = cache_db_cursor.fetchone()
             if row is None:
                 return None
-            return Map(
-                x=row['x'],
-                y=row['y'],
-                content_code=row['content_code'],
-                content_type=row['content_type']
-            )
+            return self._row_to_map(row)
         
         return [self._row_to_map(row) for row in self._filter_maps(**filters)]
 
@@ -661,7 +652,7 @@ class Maps:
             content_type=row['content_type']
         )
 
-class Monsters:
+class Monsters(BaseCache):
     def __init__(self, api):
         self.api = api
         self.cache = {}
@@ -669,6 +660,7 @@ class Monsters:
 
     def _cache_monsters(self):
         if _re_cache(self.api, "monster_cache"):
+            # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS monster_cache (
                 code TEXT PRIMARY KEY,
@@ -720,50 +712,45 @@ class Monsters:
                     drops = json.dumps([Drop(**drop).__dict__ for drop in monster["drops"]])  # Serialize drops as JSON
 
                     # Insert or replace the monster into the database
-                    cache_db.execute("""
+                    cache_db_cursor.execute("""
                     INSERT OR REPLACE INTO monster_cache (
                         code, name, level, hp, attack_fire, attack_earth, attack_water, attack_air,
                         res_fire, res_earth, res_water, res_air, min_gold, max_gold, drops
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (code, name, level, hp, attack_fire, attack_earth, attack_water, attack_air,
                         res_fire, res_earth, res_water, res_air, min_gold, max_gold, drops))
-                    cache_db.commit()
 
                     all_monsters.append(monster)
 
-                logger.debug(f"Fetched {len(monster_list)} monsters from page {i+1}", extra={"char": self.api.char.name})
-
+            cache_db.commit()
             self.cache = {monster["code"]: monster for monster in all_monsters}
             self.all_monsters = all_monsters
 
             logger.debug(f"Finished caching {len(all_monsters)} monsters", extra={"char": self.api.char.name})
-            
+
     def _filter_monsters(self, drop=None, max_level=None, min_level=None):
         query = "SELECT * FROM monster_cache WHERE 1=1"
         params = []
 
-            if drop:
+        if drop:
             query += " AND EXISTS (SELECT 1 FROM json_each(drops) WHERE json_each.value LIKE ?)"
-                params.append(f"%{drop}%")
+            params.append(f"%{drop}%")
 
-            if max_level is not None:
+        if max_level is not None:
             query += " AND level <= ?"
-                params.append(max_level)
+            params.append(max_level)
 
-            if min_level is not None:
+        if min_level is not None:
             query += " AND level >= ?"
-                params.append(min_level)
+            params.append(min_level)
 
         cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-        return rows
+        return cache_db_cursor.fetchall()
 
     def _row_to_dict(self, row):
         """Convert a SQLite row tuple to a dictionary with proper field names."""
-        # Get column names from the cursor description
-        columns = [desc[0] for desc in cache_db_cursor.description]
-        # Create a dictionary from the row tuple and column names
-        row_dict = dict(zip(columns, row))
+        # Since we're using sqlite3.Row as row_factory, we can directly convert to dict
+        row_dict = dict(row)
         
         # Convert JSON strings back to Python objects
         if 'drops' in row_dict and row_dict['drops']:
@@ -795,7 +782,7 @@ class Monsters:
         
         return [Monster(**self._row_to_dict(row)) for row in self._filter_monsters(**filters)]
 
-class Resources:
+class Resources(BaseCache):
     def __init__(self, api):
         self.api = api
         self.cache = {}
@@ -803,6 +790,7 @@ class Resources:
 
     def _cache_resources(self):
         if _re_cache(self.api, "resource_cache"):
+            # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS resource_cache (
                 code TEXT PRIMARY KEY,
@@ -834,17 +822,15 @@ class Resources:
                     drops = json.dumps([Drop(**drop).__dict__ for drop in resource.get("drops", [])])  # Serialize drops as JSON
 
                     # Insert or replace the resource into the database
-                    cache_db.execute("""
+                    cache_db_cursor.execute("""
                     INSERT OR REPLACE INTO resource_cache (
                         code, name, skill, level, drops
                     ) VALUES (?, ?, ?, ?, ?)
                     """, (code, name, skill, level, drops))
-                    cache_db.commit()
 
                     all_resources.append(resource)
 
-                logger.debug(f"Fetched {len(resource_list)} resources from page {i+1}", extra={"char": self.api.char.name})
-
+            cache_db.commit()
             self.cache = {resource["code"]: resource for resource in all_resources}
             self.all_resources = all_resources
 
@@ -872,12 +858,8 @@ class Resources:
             query += " AND resource_cache.skill = ?"
             params.append(skill)
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-
-        # Return the filtered resources
-        return rows
+        return cache_db_cursor.fetchall()
 
     def get(self, code=None, **filters):
         """
@@ -897,11 +879,13 @@ class Resources:
             query = "SELECT * FROM resource_cache WHERE code = ?"
             cache_db_cursor.execute(query, (code,))
             row = cache_db_cursor.fetchone()
-            return row if row is None else Resource(**row)
+            if row is None:
+                return None
+            return Resource(**self._row_to_dict(row))
         
-        return [Resource(**row) for row in self._filter_resources(**filters)]
+        return [Resource(**self._row_to_dict(row)) for row in self._filter_resources(**filters)]
 
-class Tasks:
+class Tasks(BaseCache):
     def __init__(self, api):
         self.api = api
         self.cache = {}
@@ -909,7 +893,7 @@ class Tasks:
 
     def _cache_tasks(self):
         if _re_cache(self.api, "task_cache"):
-            # Create table if it doesn't exist
+            # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS task_cache (
                 code TEXT PRIMARY KEY,
@@ -948,17 +932,15 @@ class Tasks:
                     }) if task.get("rewards") else None
 
                     # Insert or replace the task into the database
-                    cache_db.execute("""
+                    cache_db_cursor.execute("""
                     INSERT OR REPLACE INTO task_cache (
                         code, level, type, min_quantity, max_quantity, skill, rewards
                     ) VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (code, level, task_type, min_quantity, max_quantity, skill, rewards))
-                    cache_db.commit()
 
                     all_tasks.append(task)
 
-                logger.debug(f"Fetched {len(task_list)} tasks from page {i+1}", extra={"char": self.api.char.name})
-
+            cache_db.commit()
             self.cache = {task["code"]: task for task in all_tasks}
             self.all_tasks = all_tasks
 
@@ -990,11 +972,8 @@ class Tasks:
             query += " AND task_cache.code LIKE ?"
             params.append(f"%{name}%")
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-
-        return rows
+        return cache_db_cursor.fetchall()
 
     def get(self, code=None, **filters):
         """
@@ -1014,11 +993,13 @@ class Tasks:
             query = "SELECT * FROM task_cache WHERE code = ?"
             cache_db_cursor.execute(query, (code,))
             row = cache_db_cursor.fetchone()
-            return row if row is None else Task(**row)
+            if row is None:
+                return None
+            return Task(**self._row_to_dict(row))
         
-        return [Task(**row) for row in self._filter_tasks(**filters)]
+        return [Task(**self._row_to_dict(row)) for row in self._filter_tasks(**filters)]
 
-class Rewards:
+class Rewards(BaseCache):
     def __init__(self, api):
         self.api = api
         self.cache = {}
@@ -1026,7 +1007,7 @@ class Rewards:
 
     def _cache_rewards(self):
         if _re_cache(self.api, "reward_cache"):
-            # Create table if it doesn't exist
+            # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS reward_cache (
                 code TEXT PRIMARY KEY,
@@ -1056,17 +1037,15 @@ class Rewards:
                     max_quantity = reward["max_quantity"]
 
                     # Insert or replace the reward into the database
-                    cache_db.execute("""
+                    cache_db_cursor.execute("""
                     INSERT OR REPLACE INTO reward_cache (
                         code, rate, min_quantity, max_quantity
                     ) VALUES (?, ?, ?, ?)
                     """, (code, rate, min_quantity, max_quantity))
-                    cache_db.commit()
 
                     all_rewards.append(reward)
 
-                logger.debug(f"Fetched {len(reward_list)} task rewards from page {i+1}", extra={"char": self.api.char.name})
-
+            cache_db.commit()
             self.rewards_cache = {reward["code"]: reward for reward in all_rewards}
             self.all_rewards = all_rewards
 
@@ -1081,11 +1060,8 @@ class Rewards:
             query += " AND reward_cache.code LIKE ?"
             params.append(f"%{name}%")
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-
-        return rows
+        return cache_db_cursor.fetchall()
 
     def get(self, code=None, **filters):
         """
@@ -1105,11 +1081,13 @@ class Rewards:
             query = "SELECT * FROM reward_cache WHERE code = ?"
             cache_db_cursor.execute(query, (code,))
             row = cache_db_cursor.fetchone()
-            return row if row is None else Reward(**row)
+            if row is None:
+                return None
+            return Reward(**self._row_to_dict(row))
         
-        return [Reward(**row) for row in self._filter_rewards(**filters)]
+        return [Reward(**self._row_to_dict(row)) for row in self._filter_rewards(**filters)]
 
-class Achievements:
+class Achievements(BaseCache):
     def __init__(self, api):
         self.api = api
         self.cache = {}
@@ -1117,7 +1095,7 @@ class Achievements:
 
     def _cache_achievements(self):
         if _re_cache(self.api, "achievement_cache"):
-            # Create table if it doesn't exist
+            # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS achievement_cache (
                 code TEXT PRIMARY KEY,
@@ -1155,52 +1133,44 @@ class Achievements:
                     rewards_gold = achievement["rewards"].get("gold", 0)
 
                     # Insert or replace the achievement into the database
-                    cache_db.execute("""
+                    cache_db_cursor.execute("""
                     INSERT OR REPLACE INTO achievement_cache (
                         code, name, description, points, type, target, total, rewards_gold
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (code, name, description, points, achievement_type, target, total, rewards_gold))
-                    cache_db.commit()
 
                     all_achievements.append(achievement)
 
-                logger.debug(f"Fetched {len(achievement_list)} achievements from page {i+1}", extra={"char": self.api.char.name})
-
+            cache_db.commit()
             self.cache = {achievement["code"]: achievement for achievement in all_achievements}
             self.all_achievements = all_achievements
 
             logger.debug(f"Finished caching {len(all_achievements)} achievements", extra={"char": self.api.char.name})
 
-    def _filter_achievements(self, achievement_type=None, name=None, description=None, reward_type=None,
-                            reward_item=None, points_min=None, points_max=None):
+    def _filter_achievements(self, name=None, achievement_type=None, max_points=None, min_points=None):
+        # Base SQL query to select all achievements
         query = "SELECT * FROM achievement_cache WHERE 1=1"
         params = []
+
+        # Apply filters to the query
+        if name:
+            query += " AND achievement_cache.name LIKE ?"
+            params.append(f"%{name}%")
 
         if achievement_type:
             query += " AND achievement_cache.type = ?"
             params.append(achievement_type)
-        if name:
-            query += " AND achievement_cache.name LIKE ?"
-            params.append(f"%{name}%")
-        if description:
-            query += " AND achievement_cache.description LIKE ?"
-            params.append(f"%{description}%")
-        if reward_type:
-            query += " AND EXISTS (SELECT 1 FROM reward_cache WHERE reward_cache.type = ? AND reward_cache.code IN (SELECT reward_code FROM achievement_rewards WHERE achievement_code = achievement_cache.code))"
-            params.append(reward_type)
-        if reward_item:
-            query += " AND EXISTS (SELECT 1 FROM reward_cache WHERE reward_cache.code = ? AND reward_cache.code IN (SELECT reward_code FROM achievement_rewards WHERE achievement_code = achievement_cache.code))"
-            params.append(reward_item)
-        if points_min is not None:
-            query += " AND achievement_cache.points >= ?"
-            params.append(points_min)
-        if points_max is not None:
+
+        if max_points is not None:
             query += " AND achievement_cache.points <= ?"
-            params.append(points_max)
+            params.append(max_points)
+
+        if min_points is not None:
+            query += " AND achievement_cache.points >= ?"
+            params.append(min_points)
 
         cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-        return rows
+        return cache_db_cursor.fetchall()
 
     def get(self, code=None, **filters):
         """
@@ -1220,122 +1190,11 @@ class Achievements:
             query = "SELECT * FROM achievement_cache WHERE code = ?"
             cache_db_cursor.execute(query, (code,))
             row = cache_db_cursor.fetchone()
-            return row if row is None else Achievement(**row)
+            if row is None:
+                return None
+            return Achievement(**self._row_to_dict(row))
         
-        return [Achievement(**row) for row in self._filter_achievements(**filters)]
-
-class Effects:
-    def __init__(self, api):
-        self.api = api
-        self.cache = {}
-        self.all_effects = []
-
-    def _cache_effects(self):
-        """
-        Fetches all effects from the API and caches them in a local SQLite database.
-        """
-        global cache_db, cache_db_cursor
-
-        # Check if the cache needs to be refreshed
-        if _re_cache(self.api, "effects_cache"):
-            # Create the effects_cache table if it doesn't exist
-            cache_db_cursor.execute("""
-            CREATE TABLE IF NOT EXISTS effects_cache (
-                code TEXT PRIMARY KEY,
-                name TEXT,
-                description TEXT,
-                attributes TEXT
-            )
-            """)
-            cache_db.commit()
-
-            # Fetch all effects from the API
-            endpoint = "effects?size=1"
-            res = self.api._make_request("GET", endpoint, source="get_all_effects")
-            total_pages = math.ceil(int(res["pages"]) / 100)
-
-            logger.debug(f"Caching {total_pages} pages of effects", extra={"char": self.api.char.name})
-
-            all_effects = []
-            for i in range(total_pages):
-                endpoint = f"effects?size=100&page={i+1}"
-                res = self.api._make_request("GET", endpoint, source="get_all_effects")
-                effect_list = res["data"]
-
-                for effect in effect_list:
-                    code = effect["code"]
-                    name = effect["name"]
-                    description = effect.get("description", "")
-                    attributes = json.dumps(effect.get("attributes", {}))  # Serialize attributes as JSON
-
-                    # Insert or replace the effect into the database
-                    cache_db.execute("""
-                    INSERT OR REPLACE INTO effects_cache (
-                        code, name, description, attributes
-                    ) VALUES (?, ?, ?, ?)
-                    """, (code, name, description, attributes))
-                    cache_db.commit()
-
-                    all_effects.append(effect)
-
-                logger.debug(f"Fetched {len(effect_list)} effects from page {i+1}", extra={"char": self.api.char.name})
-
-            self.cache = {effect["code"]: effect for effect in all_effects}
-            self.all_effects = all_effects
-
-            logger.debug(f"Finished caching {len(all_effects)} effects", extra={"char": self.api.char.name})
-
-    def _filter_effects(self, name=None, attribute_key=None, attribute_value=None):
-        query = "SELECT * FROM effects_cache WHERE 1=1"
-        params = []
-
-        if name:
-            query += " AND name LIKE ?"
-            params.append(f"%{name}%")
-
-        if attribute_key and attribute_value:
-            query += """
-            AND EXISTS (
-                SELECT 1 FROM json_each(attributes)
-                WHERE json_each.key = ? AND json_each.value = ?
-            )
-            """
-            params.append(attribute_key)
-            params.append(attribute_value)
-        elif attribute_key:
-            query += """
-            AND EXISTS (
-                SELECT 1 FROM json_each(attributes)
-                WHERE json_each.key = ?
-            )
-            """
-            params.append(attribute_key)
-
-        cache_db_cursor.execute(query, params)
-        rows = cache_db_cursor.fetchall()
-        return rows
-
-    def get(self, code=None, **filters):
-        """
-        Retrieves effects based on code or filters.
-
-        Args:
-            code (str, optional): Effect code for direct lookup
-            **filters: Optional filter parameters
-
-        Returns:
-            Effect or list[Effect]: Single effect if code provided, else list of filtered effects
-        """
-        if not self.all_effects:
-            self._cache_effects()
-        
-        if code:
-            query = "SELECT * FROM effects_cache WHERE code = ?"
-            cache_db_cursor.execute(query, (code,))
-            row = cache_db_cursor.fetchone()
-            return row if row is None else Effect(**row)
-        
-        return [Effect(**row) for row in self._filter_effects(**filters)]
+        return [Achievement(**self._row_to_dict(row)) for row in self._filter_achievements(**filters)]
     
 class Events:
     def __init__(self, api):

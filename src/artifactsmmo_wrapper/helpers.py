@@ -1,4 +1,4 @@
-from .database import cache_db_cursor, cache_db
+from .database import cache_db, cache_db_cursor
 import time
 from datetime import timezone, datetime, timedelta
 from threading import Lock
@@ -20,23 +20,21 @@ def _re_cache(api: Any, table: str) -> bool:
 class CacheManager:
     """Manages caching operations and version control."""
     
-    def __init__(self, db_cursor=cache_db_cursor, db=cache_db):
-        self.db_cursor = db_cursor
-        self.db = db
+    def __init__(self):
         self._cache_lock = Lock()
 
     def needs_refresh(self, table: str, api_version: str) -> bool:
         """Check if a table needs to be refreshed based on version."""
         with self._cache_lock:
-            self.db_cursor.execute("SELECT v FROM cache_table WHERE k = ?", (table,))
-            version = self.db_cursor.fetchone()
+            cache_db_cursor.execute("SELECT v FROM cache_table WHERE k = ?", (table,))
+            version = cache_db_cursor.fetchone()
             
             if not version or version[0] != api_version:
-                self.db_cursor.execute(
+                cache_db_cursor.execute(
                     "INSERT OR REPLACE INTO cache_table (k, v) VALUES (?, ?)", 
                     (table, api_version)
                 )
-                self.db.commit()
+                cache_db.commit()
                 return True
             return False
 
@@ -96,7 +94,7 @@ def with_cooldown(func: Callable) -> Callable:
         result = func(self, *args, **kwargs)
 
         if method not in ["GET", None, "None"] and hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
-            self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
+                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
         
         return result
     return wrapper

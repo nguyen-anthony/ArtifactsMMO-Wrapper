@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple, Dict, Any
 from .log import logger
 
 # --- Dataclasses ---
@@ -60,13 +60,15 @@ class Content:
 
 @dataclass
 class TaskReward:
-    items: Optional[List[dict]]
-    gold: Optional[int]
+    items: List[Dict[str, Any]]
+    gold: int
 
 @dataclass
 class Effect:
+    code: str
     name: str
-    value: int
+    description: str
+    attributes: Dict[str, Any]
 
 @dataclass
 class CraftingRecipe:
@@ -84,26 +86,25 @@ class AchievementReward:
 class Item:
     name: str
     code: str
-    level: int
     type: str
     subtype: Optional[str]
     description: Optional[str]
-    effects: Optional[List[Effect]] = None
-    craft: Optional[CraftingRecipe] = None
-    tradeable: Optional[bool] = False
+    effects: Optional[List[Effect]]
+    craft: Optional[Dict[str, Any]]
+    tradeable: bool = False
+    level: Optional[int] = None
 
 @dataclass
 class Map:
-    name: str
-    code: str
     x: int
     y: int
-    content: Content
+    content_code: Optional[str]
+    content_type: Optional[str]
 
 @dataclass
 class Monster:
-    name: str
     code: str
+    name: str
     level: int
     hp: int
     attack_fire: int
@@ -120,8 +121,8 @@ class Monster:
 
 @dataclass
 class Resource:
-    name: str
     code: str
+    name: str
     skill: Optional[str]
     level: int
     drops: List[Drop]
@@ -145,14 +146,14 @@ class Reward:
 
 @dataclass
 class Achievement:
-    name: str
     code: str
+    name: str
     description: str
     points: int
     type: str
-    target: str
+    target: int
     total: int
-    rewards: AchievementReward
+    rewards_gold: int
 
 # --- Other ---
 

@@ -1,102 +1,102 @@
 from .database import cache_db_cursor, cache_db
 import time
-from datetime import timezone, datetime
+from datetime import timezone, datetime, timedelta
 from threading import Lock
 from functools import wraps
+from typing import Optional, Any, Callable
+import logging
 
 # --- Helpers ---
-def _re_cache(api, table):
-    print(table)
-    
-    # Use parameterized query to avoid SQL injection
-    cache_db_cursor.execute("SELECT v FROM cache_table WHERE k = ?", (table,))
-    version = cache_db_cursor.fetchone()
-
-    app_version = api._get_version()
-
+def _re_cache(api: Any, table: str) -> bool:
+    """Enhanced caching check with better error handling."""
     try:
-        if version:
-            if app_version != version[0]:
-                cache_db_cursor.execute("INSERT or REPLACE INTO cache_table (k, v) VALUES (?, ?)", (table, app_version))
-                cache_db.commit()
-                return True
-
-        else:  # No record exists
-            cache_db_cursor.execute("INSERT or REPLACE INTO cache_table (k, v) VALUES (?, ?)", (table, app_version))
-            cache_db.commit()
-            return True
-
-        return False
+        app_version = api._get_version()
+        cache_manager = CacheManager()
+        return cache_manager.needs_refresh(table, app_version)
     except Exception as e:
-        print(f"Error: {e}")
+        logging.error(f"Cache refresh error for {table}: {e}")
         return False
+
+class CacheManager:
+    """Manages caching operations and version control."""
+    
+    def __init__(self, db_cursor=cache_db_cursor, db=cache_db):
+        self.db_cursor = db_cursor
+        self.db = db
+        self._cache_lock = Lock()
+
+    def needs_refresh(self, table: str, api_version: str) -> bool:
+        """Check if a table needs to be refreshed based on version."""
+        with self._cache_lock:
+            self.db_cursor.execute("SELECT v FROM cache_table WHERE k = ?", (table,))
+            version = self.db_cursor.fetchone()
+            
+            if not version or version[0] != api_version:
+                self.db_cursor.execute(
+                    "INSERT OR REPLACE INTO cache_table (k, v) VALUES (?, ?)", 
+                    (table, api_version)
+                )
+                self.db.commit()
+                return True
+            return False
 
 class CooldownManager:
-    """
-    A class to manage cooldowns for different operations using an expiration timestamp.
-    """
+    """Enhanced cooldown management with better type hints and error handling."""
+    
     def __init__(self):
-        self.lock = Lock()
-        self.cooldown_expiration_time = None
-        self.logger = None
+        self._lock = Lock()
+        self._cooldown_expiration_time: Optional[datetime] = None
+        self.logger: Optional[logging.Logger] = None
 
     def is_on_cooldown(self) -> bool:
-        """Check if currently on cooldown based on expiration time."""
-        with self.lock:
-            if self.cooldown_expiration_time is None:
-                return False  # No cooldown set
-            # Check if current time is before the expiration time
-            return datetime.now(timezone.utc) < self.cooldown_expiration_time
+        with self._lock:
+            if not self._cooldown_expiration_time:
+                return False
+            return datetime.now(timezone.utc) < self._cooldown_expiration_time
 
     def set_cooldown_from_expiration(self, expiration_time_str: str) -> None:
-        """Set cooldown based on an ISO 8601 expiration time string."""
-        with self.lock:
-            # Parse the expiration time string
-            self.cooldown_expiration_time = datetime.fromisoformat(expiration_time_str.replace("Z", "+00:00"))
+        """Set cooldown from ISO 8601 timestamp."""
+        try:
+            with self._lock:
+                self._cooldown_expiration_time = datetime.fromisoformat(
+                    expiration_time_str.replace("Z", "+00:00")
+                )
+        except ValueError as e:
+            if self.logger:
+                self.logger.error(f"Invalid expiration time format: {e}")
 
-    def wait_for_cooldown(self, logger=None, char=None) -> None:
-        """Wait until the cooldown expires."""
-        if self.is_on_cooldown():
-            remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
-            if logger:
-                if char:
-                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": char.name})
-                else:
-                    logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": "Unknown"})
-            while self.is_on_cooldown():
-                remaining = (self.cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
-                time.sleep(min(remaining, 0.1))  # Sleep in small intervals
+    def wait_for_cooldown(self, logger: Optional[logging.Logger] = None, char: Optional[Any] = None) -> None:
+        if not self.is_on_cooldown():
+            return
 
-def with_cooldown(func):
-    """
-    Decorator to apply cooldown management to a method.
-    """
+        remaining = (self._cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
+        if logger:
+            char_name = getattr(char, 'name', 'Unknown')
+            logger.debug(f"Waiting for cooldown... ({remaining:.1f} seconds)", extra={"char": char_name})
+
+        while self.is_on_cooldown():
+            remaining = (self._cooldown_expiration_time - datetime.now(timezone.utc)).total_seconds()
+            time.sleep(min(remaining, 0.1))
+
+def with_cooldown(func: Callable) -> Callable:
+    """Enhanced decorator with better type hints and error handling."""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
         if not hasattr(self, '_cooldown_manager'):
             self._cooldown_manager = CooldownManager()
         
-        # Before executing the action, check if the character is on cooldown
         source = kwargs.get('source')
         method = kwargs.get('method')
         
-        # Skip cooldown for "get_character" source to allow fetching character data without waiting
         if source != "get_character":
-            # Ensure cooldown manager is up to date with the character's cooldown expiration time
             if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
                 self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
+            self._cooldown_manager.wait_for_cooldown(logger=getattr(self, 'logger', None), char=getattr(self, 'char', None))
 
-            # Wait for the cooldown to finish before calling the function
-            self._cooldown_manager.wait_for_cooldown(logger=self.logger, char=self.char)
-
-        # Now execute the function after confirming cooldown is finished
         result = func(self, *args, **kwargs)
 
-        # Update the cooldown after the action if needed (depending on your business logic)
-        if method not in ["GET", None, "None"]:
-            # Set cooldown after the operation, if the character has a cooldown expiration
-            if hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
-                self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
+        if method not in ["GET", None, "None"] and hasattr(self, 'char') and hasattr(self.char, 'cooldown_expiration'):
+            self._cooldown_manager.set_cooldown_from_expiration(self.char.cooldown_expiration)
         
         return result
     return wrapper

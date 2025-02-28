@@ -1,13 +1,23 @@
+from typing import Optional
 from .log import logger
+import traceback
 
 # --- Exceptions ---
 class APIException(Exception):
-    """Base exception class for API errors"""
+    """Enhanced base exception class for API errors with better tracking."""
     
-    # Log the exception when it is raised
-    def __init__(self, message):
+    def __init__(self, message: str, char_name: Optional[str] = "ROOT"):
         super().__init__(message)
-        logger.error(f"APIException raised: {message}", extra={"char": "ROOT"})
+        self.char_name = char_name
+        self.traceback = traceback.format_exc()
+        self._log_error(message)
+    
+    def _log_error(self, message: str) -> None:
+        """Log error with traceback information."""
+        logger.error(
+            f"{self.__class__.__name__}: {message}\nTraceback:\n{self.traceback}",
+            extra={"char": self.char_name}
+        )
 
     class CharacterInCooldown(Exception):
         def __init__(self, message="Character is in cooldown"):

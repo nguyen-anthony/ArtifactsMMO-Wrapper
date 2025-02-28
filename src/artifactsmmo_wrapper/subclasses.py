@@ -2,8 +2,8 @@ from .database import cache_db_cursor, cache_db
 from .helpers import _re_cache
 import math
 import json
-from typing import Optional
-from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, AchievementReward
+from typing import Optional, List, Dict, Any, Union
+from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect
 from .log import logger
 
 class Account:
@@ -411,11 +411,25 @@ class Actions:
         res = self.api._make_request("POST", endpoint, source="cancel_task")
         return res
  
-class Items:
-    def __init__(self, api):
+class BaseCache:
+    """Base class for all cache-enabled classes."""
+    
+    def _row_to_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
+        """Convert a database row to a dictionary."""
+        return dict(zip(row.keys(), row))
+
+class Items(BaseCache):
+    """Manages item-related operations and caching."""
+    
+    def __init__(self, api: 'ArtifactsAPI') -> None:
+        """
+        Initialize Items manager.
+        
+        Args:
+            api: ArtifactsAPI instance for making requests
+        """
         self.api = api
-        self.cache = {}
-        self.all_items = []
+        self._cache_items()
     
     def _cache_items(self):
         
@@ -475,12 +489,9 @@ class Items:
 
     def _filter_items(self, craft_material=None, craft_skill=None, max_level=None, min_level=None, 
                       name=None, item_type=None):
-
-        # Base SQL query to select all items
         query = "SELECT * FROM item_cache WHERE 1=1"
         params = []
 
-        # Apply filters to the query
         if craft_material:
             query += " AND EXISTS (SELECT 1 FROM json_each(json_extract(item_cache.craft, '$.items')) WHERE json_each.value LIKE ?)"
             params.append(f"%{craft_material}%")
@@ -498,50 +509,50 @@ class Items:
             params.append(min_level)
 
         if name:
-            name_pattern = f"%{name}%"
             query += " AND item_cache.name LIKE ?"
-            params.append(name_pattern)
+            params.append(f"%{name}%")
 
         if item_type:
             query += " AND item_cache.type = ?"
             params.append(item_type)
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
         rows = cache_db_cursor.fetchall()
-
-
-        # Close the connection
-        cache_db_cursor.close()
-        cache_db.close()
-
-        # Return the filtered items
         return rows
 
-    def get(self, item_code=None, **filters):
+    def get(self, 
+            code: Optional[str] = None, 
+            **filters: Any) -> Union[Item, List[Item]]:
         """
-        Get a specific item by its code or filter items based on the provided parameters.
+        Get items based on code or filters.
 
         Args:
-            item_code (str, optional): The code of a specific item to retrieve.
-            filters (dict, optional): A dictionary of filter parameters. Supported filters:
-                - craft_material (str): Filter by the code of the craft material used by the item.
-                - craft_skill (str): Filter by the craft skill required for the item.
-                - max_level (int): Filter items with a level less than or equal to the specified value.
-                - min_level (int): Filter items with a level greater than or equal to the specified value.
-                - name (str): Search for items whose names match the given pattern (case-insensitive).
-                - item_type (str): Filter by item type (e.g., 'weapon', 'armor', etc.).
+            code: Specific item code to retrieve
+            **filters: Additional filters to apply
 
         Returns:
-            dict or list: Returns a single item if `item_code` is provided, or a list of items
-            matching the filter criteria if `filters` are provided.
+            Single Item if code is provided, otherwise list of Items
         """
-
         if not self.all_items:
             self._cache_items()
-        if item_code:
-            return self.cache.get(item_code)
-        return self._filter_items(**filters)
+        
+        if code:
+            query = "SELECT * FROM item_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            if row is None:
+                return None
+            
+            row_dict = self._row_to_dict(row)
+            # Convert JSON strings
+            if row_dict['effects']:
+                row_dict['effects'] = [Effect(**effect) for effect in json.loads(row_dict['effects'])]
+            if row_dict['craft']:
+                row_dict['craft'] = json.loads(row_dict['craft'])
+            
+            return Item(**row_dict)
+        
+        return [Item(**self._row_to_dict(row)) for row in self._filter_items(**filters)]
 
 class Maps:
     def __init__(self, api):
@@ -596,46 +607,59 @@ class Maps:
 
             logger.debug(f"Finished caching {len(all_maps)} maps", extra={"char": self.api.char.name})
 
-    def _filter_maps(self, map_content=None, content_type=None):
-        # Base SQL query to select all maps
+    def _filter_maps(self, content_code=None, content_type=None):
         query = "SELECT * FROM map_cache WHERE 1=1"
         params = []
 
-        # Apply filters to the query
-        if map_content:
-            query += " AND content_code LIKE ?"
-            params.append(f"%{map_content}%")
+        if content_code:
+                query += " AND content_code LIKE ?"
+            params.append(f"%{content_code}%")
 
-        if content_type:
-            query += " AND content_type = ?"
-            params.append(content_type)
+            if content_type:
+                query += " AND content_type = ?"
+                params.append(content_type)
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
         rows = cache_db_cursor.fetchall()
-
-        # Return the filtered maps
         return rows
 
     def get(self, x=None, y=None, **filters):
         """
-        Retrieves a specific map by coordinates or filters maps based on provided parameters.
+        Retrieves maps based on coordinates or filters.
         
         Args:
-            x (int, optional): Map's X coordinate.
-            y (int, optional): Map's Y coordinate.
-            **filters: Optional filter parameters. Supported filters:
-                - map_content: Search maps by content (case-insensitive).
-                - content_type: Filter maps by content type.
+            x (int, optional): X coordinate
+            y (int, optional): Y coordinate
+            **filters: Optional filter parameters
 
         Returns:
-            dict or list: A specific map if coordinates are provided, else a filtered list of maps.
+            Map or list[Map]: Single map if coordinates provided, else list of filtered maps
         """
         if not self.all_maps:
             self._cache_maps()
+        
         if x is not None and y is not None:
-            return self.cache.get(f"{x}/{y}")
-        return self._filter_maps(**filters)
+            query = "SELECT * FROM map_cache WHERE x = ? AND y = ?"
+            cache_db_cursor.execute(query, (x, y))
+            row = cache_db_cursor.fetchone()
+            if row is None:
+                return None
+            return Map(
+                x=row['x'],
+                y=row['y'],
+                content_code=row['content_code'],
+                content_type=row['content_type']
+            )
+        
+        return [self._row_to_map(row) for row in self._filter_maps(**filters)]
+
+    def _row_to_map(self, row):
+        return Map(
+            x=row['x'],
+            y=row['y'],
+            content_code=row['content_code'],
+            content_type=row['content_type']
+        )
 
 class Monsters:
     def __init__(self, api):
@@ -715,49 +739,61 @@ class Monsters:
             logger.debug(f"Finished caching {len(all_monsters)} monsters", extra={"char": self.api.char.name})
             
     def _filter_monsters(self, drop=None, max_level=None, min_level=None):
-        # Base SQL query to select all monsters
         query = "SELECT * FROM monster_cache WHERE 1=1"
         params = []
 
-        # Apply filters to the query
-        if drop:
-            query += " AND EXISTS (SELECT 1 FROM json_each(json_extract(monster_cache.drops, '$')) WHERE json_each.value LIKE ?)"
-            params.append(f"%{drop}%")
+            if drop:
+            query += " AND EXISTS (SELECT 1 FROM json_each(drops) WHERE json_each.value LIKE ?)"
+                params.append(f"%{drop}%")
 
-        if max_level is not None:
-            query += " AND monster_cache.level <= ?"
-            params.append(max_level)
+            if max_level is not None:
+            query += " AND level <= ?"
+                params.append(max_level)
 
-        if min_level is not None:
-            query += " AND monster_cache.level >= ?"
-            params.append(min_level)
+            if min_level is not None:
+            query += " AND level >= ?"
+                params.append(min_level)
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
         rows = cache_db_cursor.fetchall()
-
-        # Return the filtered monsters
         return rows
 
-    def get(self, monster_code=None, **filters):
+    def _row_to_dict(self, row):
+        """Convert a SQLite row tuple to a dictionary with proper field names."""
+        # Get column names from the cursor description
+        columns = [desc[0] for desc in cache_db_cursor.description]
+        # Create a dictionary from the row tuple and column names
+        row_dict = dict(zip(columns, row))
+        
+        # Convert JSON strings back to Python objects
+        if 'drops' in row_dict and row_dict['drops']:
+            row_dict['drops'] = [Drop(**drop) for drop in json.loads(row_dict['drops'])]
+        
+        return row_dict
+
+    def get(self, code=None, **filters):
         """
-        Retrieves a specific monster or filters monsters based on provided parameters.
+        Retrieves monsters based on code or filters.
         
         Args:
-            monster_code (str, optional): Retrieve monster by its unique code.
-            **filters: Optional filter parameters. Supported filters:
-                - drop: Filter monsters that drop a specific item.
-                - max_level: Filter by maximum monster level.
-                - min_level: Filter by minimum monster level.
+            code (str, optional): Monster code for direct lookup
+            **filters: Optional filter parameters
 
         Returns:
-            dict or list: A single monster if monster_code is provided, else a filtered list of monsters.
+            Monster or list[Monster]: Single monster if code provided, else list of filtered monsters
         """
         if not self.all_monsters:
             self._cache_monsters()
-        if monster_code:
-            return self.cache.get(monster_code)
-        return self._filter_monsters(**filters)
+        
+        if code:
+            query = "SELECT * FROM monster_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            if row is None:
+                return None
+            return Monster(**self._row_to_dict(row))
+        
+        return [Monster(**self._row_to_dict(row)) for row in self._filter_monsters(**filters)]
 
 class Resources:
     def __init__(self, api):
@@ -843,26 +879,27 @@ class Resources:
         # Return the filtered resources
         return rows
 
-    def get(self, resource_code=None, **filters):
+    def get(self, code=None, **filters):
         """
-        Retrieves a specific resource or filters resources based on provided parameters.
+        Retrieves resources based on code or filters.
         
         Args:
-            resource_code (str, optional): Retrieve resource by its unique code.
-            **filters: Optional filter parameters. Supported filters:
-                - drop: Filter resources that drop a specific item.
-                - max_level: Filter by maximum resource level.
-                - min_level: Filter by minimum resource level.
-                - skill: Filter by craft skill.
+            code (str, optional): Resource code for direct lookup
+            **filters: Optional filter parameters
 
         Returns:
-            dict or list: A single resource if resource_code is provided, else a filtered list of resources.
+            Resource or list[Resource]: Single resource if code provided, else list of filtered resources
         """
         if not self.all_resources:
             self._cache_resources()
-        if resource_code:
-            return self.cache.get(resource_code)
-        return self._filter_resources(**filters)
+        
+        if code:
+            query = "SELECT * FROM resource_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            return row if row is None else Resource(**row)
+        
+        return [Resource(**row) for row in self._filter_resources(**filters)]
 
 class Tasks:
     def __init__(self, api):
@@ -957,43 +994,29 @@ class Tasks:
         cache_db_cursor.execute(query, params)
         rows = cache_db_cursor.fetchall()
 
-        # Reconstruct tasks from the database rows
-        filtered_tasks = []
-        for row in rows:
-            task = Task(
-                code=row[0],
-                level=row[1],
-                type=row[2],
-                min_quantity=row[3],
-                max_quantity=row[4],
-                skill=row[5],
-                rewards=json.loads(row[6]) if row[6] else None
-            )
-            filtered_tasks.append(task)
+        return rows
 
-        return filtered_tasks
-
-    def get(self, task_code=None, **filters):
+    def get(self, code=None, **filters):
         """
-        Retrieves a specific task or filters tasks based on provided parameters.
+        Retrieves tasks based on code or filters.
         
         Args:
-            task_code (str, optional): Retrieve task by its unique code.
-            **filters: Optional filter parameters. Supported filters:
-                - skill: Filter by task skill.
-                - task_type: Filter by task type.
-                - max_level: Filter by maximum task level.
-                - min_level: Filter by minimum task level.
-                - name: Filter by task name (case-insensitive).
+            code (str, optional): Task code for direct lookup
+            **filters: Optional filter parameters
 
         Returns:
-            dict or list: A single task if task_code is provided, else a filtered list of tasks.
+            Task or list[Task]: Single task if code provided, else list of filtered tasks
         """
         if not self.all_tasks:
             self._cache_tasks()
-        if task_code:
-            return self.cache.get(task_code)
-        return self._filter_tasks(**filters)
+        
+        if code:
+            query = "SELECT * FROM task_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            return row if row is None else Task(**row)
+        
+        return [Task(**row) for row in self._filter_tasks(**filters)]
 
 class Rewards:
     def __init__(self, api):
@@ -1062,51 +1085,29 @@ class Rewards:
         cache_db_cursor.execute(query, params)
         rows = cache_db_cursor.fetchall()
 
-        # Reconstruct rewards from the database rows
-        filtered_rewards = []
-        for row in rows:
-            reward = Reward(
-                code=row[0],
-                rate=row[1],
-                min_quantity=row[2],
-                max_quantity=row[3]
-            )
-            filtered_rewards.append(reward)
+        return rows
 
-        return filtered_rewards
-
-    def get_all_rewards(self, **filters):
-        logger.debug(f"Getting all task rewards with filters: {filters}", extra={"char": self.api.char.name})
-        
-        if not self.all_rewards:
-            logger.debug("Rewards cache is empty, calling _cache_rewards() to load rewards.", 
-                        extra={"char": self.api.char.name})
-            self._cache_rewards()
-
-        return self._filter_rewards(**filters)
-
-    def get(self, task_code=None):
+    def get(self, code=None, **filters):
         """
-        Retrieves a specific reward or filters rewards based on provided parameters.
+        Retrieves rewards based on code or filters.
         
         Args:
-            reward_code (str, optional): Retrieve reward by its unique code.
+            code (str, optional): Reward code for direct lookup
+            **filters: Optional filter parameters
 
         Returns:
-            dict or list: A single reward if reward_code is provided, else a filtered list of rewards.
+            Reward or list[Reward]: Single reward if code provided, else list of filtered rewards
         """
         if not self.all_rewards:
-            logger.debug("Rewards cache is empty, calling _cache_rewards() to load rewards.", 
-                        extra={"char": self.api.char.name})
             self._cache_rewards()
 
-        if task_code:
-            reward = self.rewards_cache.get(task_code)
-            if reward:
-                logger.debug(f"Found reward with code {task_code}", extra={"char": self.api.char.name})
-            else:
-                logger.debug(f"Reward with code {task_code} not found in cache", extra={"char": self.api.char.name})
-            return reward
+        if code:
+            query = "SELECT * FROM reward_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            return row if row is None else Reward(**row)
+        
+        return [Reward(**row) for row in self._filter_rewards(**filters)]
 
 class Achievements:
     def __init__(self, api):
@@ -1172,7 +1173,6 @@ class Achievements:
 
     def _filter_achievements(self, achievement_type=None, name=None, description=None, reward_type=None,
                             reward_item=None, points_min=None, points_max=None):
-        # Base SQL query to select all achievements
         query = "SELECT * FROM achievement_cache WHERE 1=1"
         params = []
 
@@ -1198,50 +1198,31 @@ class Achievements:
             query += " AND achievement_cache.points <= ?"
             params.append(points_max)
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
         rows = cache_db_cursor.fetchall()
+        return rows
 
-        # Reconstruct achievements from the database rows
-        filtered_achievements = []
-        for row in rows:
-            achievement = Achievement(
-                name=row[1],
-                code=row[0],
-                description=row[2],
-                points=row[3],
-                type=row[4],
-                target=row[5],
-                total=row[6],
-                rewards=AchievementReward(gold=row[7])
-            )
-            filtered_achievements.append(achievement)
-
-        return filtered_achievements
-
-    def get(self, achievement_code=None, **filters):
+    def get(self, code=None, **filters):
         """
-        Retrieves a specific achievement or filters achievements based on provided parameters.
+        Retrieves achievements based on code or filters.
         
         Args:
-            achievement_code (str, optional): Retrieve achievement by its unique code.
-            **filters: Optional filter parameters. Supported filters:
-                - achievement_type: Filter by achievement type.
-                - name: Filter by achievement name (case-insensitive).
-                - description: Filter by achievement description (case-insensitive).
-                - reward_type: Filter by reward type.
-                - reward_item: Filter by reward item code.
-                - points_min: Filter by minimum achievement points.
-                - points_max: Filter by maximum achievement points.
+            code (str, optional): Achievement code for direct lookup
+            **filters: Optional filter parameters
 
         Returns:
-            dict or list: A single achievement if achievement_code is provided, else a filtered list of achievements.
+            Achievement or list[Achievement]: Single achievement if code provided, else list of filtered achievements
         """
         if not self.all_achievements:
             self._cache_achievements()
-        if achievement_code:
-            return self.cache.get(achievement_code)
-        return self._filter_achievements(**filters)
+        
+        if code:
+            query = "SELECT * FROM achievement_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            return row if row is None else Achievement(**row)
+        
+        return [Achievement(**row) for row in self._filter_achievements(**filters)]
 
 class Effects:
     def __init__(self, api):
@@ -1305,24 +1286,9 @@ class Effects:
             logger.debug(f"Finished caching {len(all_effects)} effects", extra={"char": self.api.char.name})
 
     def _filter_effects(self, name=None, attribute_key=None, attribute_value=None):
-        """
-        Filters effects based on provided criteria.
-
-        Args:
-            name (str, optional): Filter effects by name.
-            attribute_key (str, optional): Filter effects that have a specific attribute key.
-            attribute_value (str, optional): Filter effects where a specific attribute key has a specific value.
-
-        Returns:
-            list: A list of filtered effects.
-        """
-        global cache_db_cursor
-
-        # Base SQL query to select all effects
         query = "SELECT * FROM effects_cache WHERE 1=1"
         params = []
 
-        # Apply filters to the query
         if name:
             query += " AND name LIKE ?"
             params.append(f"%{name}%")
@@ -1345,42 +1311,31 @@ class Effects:
             """
             params.append(attribute_key)
 
-        # Execute the query
         cache_db_cursor.execute(query, params)
         rows = cache_db_cursor.fetchall()
+        return rows
 
-        # Convert rows to dictionaries
-        filtered_effects = []
-        for row in rows:
-            effect = {
-                "code": row[0],
-                "name": row[1],
-                "description": row[2],
-                "attributes": json.loads(row[3])  # Deserialize attributes from JSON
-            }
-            filtered_effects.append(effect)
-
-        return filtered_effects
-
-    def get(self, effect_code=None, **filters):
+    def get(self, code=None, **filters):
         """
-        Retrieves a specific effect or filters effects based on provided parameters.
+        Retrieves effects based on code or filters.
 
         Args:
-            effect_code (str, optional): Retrieve effect by its unique code.
-            **filters: Optional filter parameters. Supported filters:
-                - name: Filter effects by name.
-                - attribute_key: Filter effects that have a specific attribute key.
-                - attribute_value: Filter effects where a specific attribute key has a specific value.
+            code (str, optional): Effect code for direct lookup
+            **filters: Optional filter parameters
 
         Returns:
-            dict or list: A single effect if effect_code is provided, else a filtered list of effects.
+            Effect or list[Effect]: Single effect if code provided, else list of filtered effects
         """
         if not self.all_effects:
             self._cache_effects()
-        if effect_code:
-            return self.cache.get(effect_code)
-        return self._filter_effects(**filters)
+        
+        if code:
+            query = "SELECT * FROM effects_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            return row if row is None else Effect(**row)
+        
+        return [Effect(**row) for row in self._filter_effects(**filters)]
     
 class Events:
     def __init__(self, api):

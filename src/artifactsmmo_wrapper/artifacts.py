@@ -11,6 +11,7 @@ from .helpers import CooldownManager, with_cooldown
 from .subclasses import Account, Character, Actions, Maps, Items, Monsters, Resources, Events, GE, Tasks, Rewards, Achievements, Leaderboard, Accounts
 from .log import logger
 from .database import cache_db_cursor, cache_db
+from .config import config
 
 
 # --- Globals ---
@@ -20,89 +21,112 @@ _task_loops = []
 
 # --- Wrapper ---
 class ArtifactsAPI:
+    """Main API wrapper class with improved initialization and error handling."""
+    
     def __init__(self, api_key: str, character_name: str):
-        extra = {"char": character_name}
-        self.logger = logging.LoggerAdapter(logger, extra)
-        
-        self.logger.debug("Instantiating wrapper for " + character_name, extra = {"char": character_name})
+        self.logger = logging.LoggerAdapter(logger, {"char": character_name})
+        self.logger.debug(f"Initializing wrapper for {character_name}")
 
         self.token: str = api_key
-        self.base_url: str = "https://api.artifactsmmo.com"
+        self.base_url: str = config.api_base_url
         self.headers: Dict[str, str] = {
             "content-type": "application/json",
             "Accept": "application/json",
             "Authorization": f'Bearer {self.token}'
         }
         
-        # Initialize cooldown manager
+        # Initialize managers
         self._cooldown_manager = CooldownManager()
         self._cooldown_manager.logger = self.logger
         
         self.character_name = character_name
-        self.char: PlayerData = self.get_character(character_name=character_name)
+        self.char: Optional[PlayerData] = None
+        self._initialize_character(character_name)
+        self._initialize_subclasses()
 
-        # --- Subclass definition ---
-        self.account = Account(self)
-        self.character = Character(self)
-        self.actions = Actions(self)
-        self.maps = Maps(self)
-        self.items = Items(self)
-        self.monsters = Monsters(self)
-        self.resources = Resources(self)
-        self.events = Events(self)
-        self.ge = GE(self)
-        self.tasks = Tasks(self)
-        self.task_rewards = Rewards(self)
-        self.achievments = Achievements(self)
-        self.leaderboard = Leaderboard(self)
-        self.accounts = Accounts(self)
-        self.content_maps = ContentMaps(self)
+    def _initialize_character(self, character_name: str) -> None:
+        """Separate character initialization for better error handling."""
+        try:
+            self.char = self.get_character(character_name=character_name)
+        except Exception as e:
+            self.logger.error(f"Failed to initialize character: {e}")
+            raise
 
-        self.logger.debug("Finished instantiating wrapper for " + character_name, extra = {"char": character_name})
-
+    def _initialize_subclasses(self) -> None:
+        """Initialize all subclasses in a more maintainable way."""
+        self.subclasses = {
+            'account': Account,
+            'character': Character,
+            'actions': Actions,
+            'maps': Maps,
+            'items': Items,
+            'monsters': Monsters,
+            'resources': Resources,
+            'events': Events,
+            'ge': GE,
+            'tasks': Tasks,
+            'task_rewards': Rewards,
+            'achievements': Achievements,
+            'leaderboard': Leaderboard,
+            'accounts': Accounts,
+            'content_maps': ContentMaps,
+        }
+        
+        for name, cls in self.subclasses.items():
+            setattr(self, name, cls(self))
 
     @with_cooldown
     def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, 
-                    source: Optional[str] = None, retries: int = 3, include_headers: bool = False) -> dict:
-        """
-        Makes an API request and returns the JSON response.
-        Optionally returns response headers when include_headers is True.
-        Now managed by cooldown decorator.
-        """
+                    source: Optional[str] = None, retries: int = 3, 
+                    include_headers: bool = False) -> dict:
+        """Enhanced request handling with better error management."""
         try:
-            endpoint = endpoint.strip("/")
-            url = f"{self.base_url}/{endpoint}"
+            url = f"{self.base_url}/{endpoint.strip('/')}"
+            
             if source != "get_character":
-                self.logger.debug(f"Sending API request to {url} with the following json:\n{json}", extra={"char": self.character_name})
+                self.logger.debug(f"API request: {url} - JSON: {json}")
 
-            response = requests.request(method, url, headers=self.headers, json=json, timeout=10)
+            response = requests.request(
+                method, 
+                url, 
+                headers=self.headers, 
+                json=json, 
+                timeout=10
+            )
 
             if response.status_code != 200:
-                message = f"An error occurred. Returned code {response.status_code}, {response.json().get('error', {}).get('message', '')} Endpoint: {endpoint}"
-                message += f", Body: {json}" if json else ""
-                message += f", Source: {source}" if source else ""
-
-                self._raise(response.status_code, message)
+                self._handle_error_response(response, endpoint, json, source)
 
             if source != "get_character":
                 self.get_character()
             
-            # Return headers if the flag is set
-            if include_headers:
-                return {
-                    "json": response.json(),
-                    "headers": dict(response.headers)
-                }
+            return {
+                "json": response.json(),
+                "headers": dict(response.headers)
+            } if include_headers else response.json()
 
-            return response.json()
-
+        except requests.Timeout:
+            self.logger.error("Request timed out")
+            if retries > 0:
+                return self._make_request(method, endpoint, json, source, retries - 1, include_headers)
+            raise
         except Exception as e:
-            if "Character already at destination" not in str(e):
-                if retries:
-                    retries -= 1
-                    logger.warning(f"Retrying, {retries} retries left", extra={"char": self.character_name})
-                    return self._make_request(method, endpoint, json, source, retries, include_headers)
-            
+            if "Character already at destination" not in str(e) and retries > 0:
+                return self._make_request(method, endpoint, json, source, retries - 1, include_headers)
+            raise
+
+    def _handle_error_response(self, response: requests.Response, endpoint: str, 
+                             json: Optional[dict], source: Optional[str]) -> None:
+        """Separate error handling logic for cleaner code."""
+        error_data = response.json().get('error', {})
+        message = f"Error {response.status_code}: {error_data.get('message', '')}"
+        message += f"\nEndpoint: {endpoint}"
+        if json:
+            message += f"\nBody: {json}"
+        if source:
+            message += f"\nSource: {source}"
+        
+        self._raise(response.status_code, message)
 
     def _get_version(self):
         version = self._make_request(endpoint="", method="GET").get("data").get("version")

@@ -9,7 +9,7 @@ name = "artifactsmmo_wrapper"
 # MAJOR = 0 (initial release in this epoch)
 # MINOR = 0 (new features)
 # PATCH = 0 (bug fixes)
-version = "3000.0.0"
+version = "3000.0.1"
 authors = [
     { name = "Veillax", email = "contact@veillax.com" },
 ]

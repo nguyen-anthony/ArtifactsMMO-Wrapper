@@ -16,6 +16,7 @@ class Account:
         Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
+        logger.debug("Initializing Account class", src="Root")
         self.api = api
 
     # --- Account Functions ---
@@ -62,6 +63,7 @@ class Character:
         Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
+        logger.debug("Initializing Character class", src="Root")
         self.api = api
 
     # --- Character Functions ---
@@ -115,6 +117,7 @@ class Actions:
         Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
+        logger.debug("Initializing Actions class", src="Root")
         self.api = api
 
     # --- Character Actions ---
@@ -429,11 +432,14 @@ class Items(BaseCache):
         Args:
             api: ArtifactsAPI instance for making requests
         """
+        logger.debug("Initializing Items class", src="Root")
         self.api = api
+        self.cache = {}
+        self.all_items = []
         self._cache_items()
     
-    def _cache_items(self):
-        if _re_cache(self.api, "item_cache"):
+    def _cache_items(self, force=False):
+        if _re_cache(self.api, "item_cache") or force:
             # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS item_cache (
@@ -453,9 +459,8 @@ class Items(BaseCache):
             res = self.api._make_request("GET", endpoint, source="get_all_items")
             pages = math.ceil(int(res["pages"]) / 100)
 
-            logger.debug(f"Caching {pages} pages of items", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of items", src=self.api.char.name)
 
-            all_items = []
             for i in range(pages):
                 endpoint = f"items?size=100&page={i+1}"
                 res = self.api._make_request("GET", endpoint, source="get_all_items", include_headers=True)
@@ -478,13 +483,12 @@ class Items(BaseCache):
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (name, code, type_, subtype, description, effects, craft, tradeable))
                     
-                    all_items.append(item)
+                    self.all_items.append(item)
 
             cache_db.commit()
-            self.cache = {item["code"]: item for item in all_items}
-            self.all_items = all_items
+            self.cache = {item["code"]: item for item in self.all_items}
 
-            logger.debug(f"Finished caching {len(all_items)} items", extra={"char": self.api.char.name})
+            logger.debug(f"Finished caching {len(self.all_items)} items", src=self.api.char.name)
 
     def _filter_items(self, craft_material=None, craft_skill=None, max_level=None, min_level=None, 
                       name=None, item_type=None):
@@ -519,7 +523,7 @@ class Items(BaseCache):
         return cache_db_cursor.fetchall()
 
     def get(self, 
-            code: Optional[str] = None, 
+            code: Optional[str] = None,
             **filters: Any) -> Union[Item, List[Item]]:
         """
         Get items based on code or filters.
@@ -544,22 +548,32 @@ class Items(BaseCache):
             row_dict = dict(row)
             # Convert JSON strings
             if row_dict['effects']:
-                row_dict['effects'] = [Effect(**effect) for effect in json.loads(row_dict['effects'])]
+                effects_data = json.loads(row_dict['effects'])
+                row_dict['effects'] = []
+                for effect in effects_data:
+                    # Each effect is a dict with 'code' and 'value'
+                    row_dict['effects'].append(Effect(
+                        code=effect['code'],
+                        name=effect['code'],  # Use code as name since that's what we have
+                        description=effect['code'],  # Use code as description since that's what we have
+                        attributes={'value': effect['value']} if 'value' in effect else {}
+                    ))
             if row_dict['craft']:
                 row_dict['craft'] = json.loads(row_dict['craft'])
             
             return Item(**row_dict)
         
         return [Item(**dict(row)) for row in self._filter_items(**filters)]
-
+    
 class Maps(BaseCache):
     def __init__(self, api):
+        logger.debug("Initializing Maps class", src="Root")
         self.api = api
         self.cache = {}
         self.all_maps = []
 
-    def _cache_maps(self):
-        if _re_cache(self.api, "map_cache"):
+    def _cache_maps(self, force=False):
+        if _re_cache(self.api, "map_cache") or force:
             # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS map_cache (
@@ -576,7 +590,7 @@ class Maps(BaseCache):
             res = self.api._make_request("GET", endpoint, source="get_all_maps")
             pages = math.ceil(int(res["pages"]) / 100)
             
-            logger.debug(f"Caching {pages} pages of maps", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of maps", src=self.api.char.name)
             
             all_maps = []
             for i in range(pages):
@@ -587,8 +601,8 @@ class Maps(BaseCache):
                 for map_item in map_list:
                     x = map_item['x']
                     y = map_item['y']
-                    content_code = map_item.get('content_code', '')
-                    content_type = map_item.get('content_type', '')
+                    content_code = map_item["content"]["code"] if map_item["content"] else ''
+                    content_type = map_item["content"]["type"] if map_item["content"] else ''
                     
                     # Insert or replace the map into the database
                     cache_db_cursor.execute("""
@@ -602,7 +616,7 @@ class Maps(BaseCache):
             self.cache = {f"{item['x']}/{item['y']}": item for item in all_maps}
             self.all_maps = all_maps
 
-            logger.debug(f"Finished caching {len(all_maps)} maps", extra={"char": self.api.char.name})
+            logger.debug(f"Finished caching {len(all_maps)} maps", src=self.api.char.name)
 
     def _filter_maps(self, content_code=None, content_type=None):
         query = "SELECT * FROM map_cache WHERE 1=1"
@@ -654,12 +668,13 @@ class Maps(BaseCache):
 
 class Monsters(BaseCache):
     def __init__(self, api):
+        logger.debug("Initializing Monsters class", src="Root")
         self.api = api
         self.cache = {}
         self.all_monsters = []
 
-    def _cache_monsters(self):
-        if _re_cache(self.api, "monster_cache"):
+    def _cache_monsters(self, force=False):
+        if _re_cache(self.api, "monster_cache") or force:
             # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS monster_cache (
@@ -686,7 +701,7 @@ class Monsters(BaseCache):
             res = self.api._make_request("GET", endpoint, source="get_all_monsters")
             pages = math.ceil(int(res["pages"]) / 100)
 
-            logger.debug(f"Caching {pages} pages of monsters", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of monsters", src=self.api.char.name)
 
             all_monsters = []
             for i in range(pages):
@@ -726,7 +741,7 @@ class Monsters(BaseCache):
             self.cache = {monster["code"]: monster for monster in all_monsters}
             self.all_monsters = all_monsters
 
-            logger.debug(f"Finished caching {len(all_monsters)} monsters", extra={"char": self.api.char.name})
+            logger.debug(f"Finished caching {len(all_monsters)} monsters", src=self.api.char.name)
 
     def _filter_monsters(self, drop=None, max_level=None, min_level=None):
         query = "SELECT * FROM monster_cache WHERE 1=1"
@@ -784,12 +799,13 @@ class Monsters(BaseCache):
 
 class Resources(BaseCache):
     def __init__(self, api):
+        logger.debug("Initializing Resources class", src="Root")
         self.api = api
         self.cache = {}
         self.all_resources = []
 
-    def _cache_resources(self):
-        if _re_cache(self.api, "resource_cache"):
+    def _cache_resources(self, force=False):
+        if _re_cache(self.api, "resource_cache") or force:
             # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS resource_cache (
@@ -806,7 +822,7 @@ class Resources(BaseCache):
             res = self.api._make_request("GET", endpoint, source="get_all_resources")
             pages = math.ceil(int(res["pages"]) / 100)
 
-            logger.debug(f"Caching {pages} pages of resources", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of resources", src=self.api.char.name)
 
             all_resources = []
             for i in range(pages):
@@ -834,7 +850,7 @@ class Resources(BaseCache):
             self.cache = {resource["code"]: resource for resource in all_resources}
             self.all_resources = all_resources
 
-            logger.debug(f"Finished caching {len(all_resources)} resources", extra={"char": self.api.char.name})
+            logger.debug(f"Finished caching {len(all_resources)} resources", src=self.api.char.name)
 
     def _filter_resources(self, drop=None, max_level=None, min_level=None, skill=None):
         # Base SQL query to select all resources
@@ -887,12 +903,13 @@ class Resources(BaseCache):
 
 class Tasks(BaseCache):
     def __init__(self, api):
+        logger.debug("Initializing Tasks class", src="Root")
         self.api = api
         self.cache = {}
         self.all_tasks = []
 
-    def _cache_tasks(self):
-        if _re_cache(self.api, "task_cache"):
+    def _cache_tasks(self, force=False):
+        if _re_cache(self.api, "task_cache") or force:
             # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS task_cache (
@@ -911,7 +928,7 @@ class Tasks(BaseCache):
             res = self.api._make_request("GET", endpoint, source="get_all_tasks")
             pages = math.ceil(int(res["pages"]) / 100)
 
-            logger.debug(f"Caching {pages} pages of tasks", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of tasks", src=self.api.char.name)
 
             all_tasks = []
             for i in range(pages):
@@ -944,7 +961,7 @@ class Tasks(BaseCache):
             self.cache = {task["code"]: task for task in all_tasks}
             self.all_tasks = all_tasks
 
-            logger.debug(f"Finished caching {len(all_tasks)} tasks", extra={"char": self.api.char.name})
+            logger.debug(f"Finished caching {len(all_tasks)} tasks", src=self.api.char.name)
 
     def _filter_tasks(self, skill=None, task_type=None, max_level=None, min_level=None, name=None):
         # Base SQL query to select all tasks
@@ -1001,12 +1018,13 @@ class Tasks(BaseCache):
 
 class Rewards(BaseCache):
     def __init__(self, api):
+        logger.debug("Initializing Rewards class", src="Root")
         self.api = api
         self.cache = {}
         self.all_rewards = []
 
-    def _cache_rewards(self):
-        if _re_cache(self.api, "reward_cache"):
+    def _cache_rewards(self, force=False):
+        if _re_cache(self.api, "reward_cache") or force:
             # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS reward_cache (
@@ -1022,7 +1040,7 @@ class Rewards(BaseCache):
             res = self.api._make_request("GET", endpoint, source="get_all_task_rewards")
             pages = math.ceil(int(res["pages"]) / 100)
 
-            logger.debug(f"Caching {pages} pages of task rewards", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of task rewards", src=self.api.char.name)
 
             all_rewards = []
             for i in range(pages):
@@ -1049,7 +1067,7 @@ class Rewards(BaseCache):
             self.rewards_cache = {reward["code"]: reward for reward in all_rewards}
             self.all_rewards = all_rewards
 
-            logger.debug(f"Finished caching {len(all_rewards)} task rewards", extra={"char": self.api.char.name})
+            logger.debug(f"Finished caching {len(all_rewards)} task rewards", src=self.api.char.name)
 
     def _filter_rewards(self, name=None):
         # Base SQL query to select all rewards
@@ -1089,12 +1107,13 @@ class Rewards(BaseCache):
 
 class Achievements(BaseCache):
     def __init__(self, api):
+        logger.debug("Initializing Achievements class", src="Root")
         self.api = api
         self.cache = {}
         self.all_achievements = []
 
-    def _cache_achievements(self):
-        if _re_cache(self.api, "achievement_cache"):
+    def _cache_achievements(self, force=False):
+        if _re_cache(self.api, "achievement_cache") or force:
             # Create table
             cache_db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS achievement_cache (
@@ -1114,7 +1133,7 @@ class Achievements(BaseCache):
             res = self.api._make_request("GET", endpoint, source="get_all_achievements")
             pages = math.ceil(int(res["pages"]) / 100)
 
-            logger.debug(f"Caching {pages} pages of achievements", extra={"char": self.api.char.name})
+            logger.debug(f"Caching {pages} pages of achievements", src=self.api.char.name)
 
             all_achievements = []
             for i in range(pages):
@@ -1145,7 +1164,7 @@ class Achievements(BaseCache):
             self.cache = {achievement["code"]: achievement for achievement in all_achievements}
             self.all_achievements = all_achievements
 
-            logger.debug(f"Finished caching {len(all_achievements)} achievements", extra={"char": self.api.char.name})
+            logger.debug(f"Finished caching {len(all_achievements)} achievements", src=self.api.char.name)
 
     def _filter_achievements(self, name=None, achievement_type=None, max_points=None, min_points=None):
         # Base SQL query to select all achievements
@@ -1204,6 +1223,7 @@ class Events:
         Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
+        logger.debug("Initializing Events class", src="Root")
         self.api = api
     # --- Event Functions ---
     def get_active(self, page: int = 1) -> dict:
@@ -1242,6 +1262,7 @@ class GE:
         Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
+        logger.debug("Initializing GE class", src="Root")
         self.api = api
     # --- Grand Exchange Functions ---
     def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1, size: int = 100) -> dict:
@@ -1355,6 +1376,7 @@ class Leaderboard:
         Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
+        logger.debug("Initializing Leaderboard class", src="Root")
         self.api = api
     # --- Leaderboard Functions ---
     def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
@@ -1401,6 +1423,7 @@ class Accounts:
         Args:
             api (ArtifactsAPI): Instance of the main API class.
         """
+        logger.debug("Initializing Accounts class", src="Root")
         self.api = api
     # --- Accounts Functions ---
     def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:

@@ -10,8 +10,7 @@ from .exceptions import APIException
 from .helpers import CooldownManager, with_cooldown
 from .subclasses import (
     Account, Character, Actions, Maps, Items, 
-    Monsters, Resources, Tasks, Rewards, Achievements, 
-    BaseCache
+    Monsters, Resources, Tasks, Rewards, Achievements, Events, GE, Leaderboard, Accounts
 )
 from .log import logger
 from .database import cache_db, cache_db_cursor
@@ -20,105 +19,6 @@ from .config import config
 
 # --- Globals ---
 _task_loops = []
-
-
-# --- Additional Classes ---
-class Events:
-    def __init__(self, api):
-        self.api = api
-    
-    def get_active(self, page: int = 1) -> dict:
-        query = f"size=100&page={page}"
-        endpoint = f"events/active?{query}"
-        return self.api._make_request("GET", endpoint, source="get_active_events").get("data")
-
-    def get_all(self, page: int = 1) -> dict:
-        query = f"size=100&page={page}"
-        endpoint = f"events?{query}"
-        return self.api._make_request("GET", endpoint, source="get_all_events").get("data")
-
-class GE:
-    def __init__(self, api):
-        self.api = api
-    
-    def get_history(self, item_code: str, buyer: Optional[str] = None, seller: Optional[str] = None, page: int = 1, size: int = 100) -> dict:
-        query = f"size={size}&page={page}"
-        if buyer:
-            query += f"&buyer={buyer}"
-        if seller:
-            query += f"&seller={seller}"
-        endpoint = f"grandexchange/history/{item_code}?{query}"
-        return self.api._make_request("GET", endpoint, source="get_ge_history").get("data")
-
-    def get_sell_orders(self, item_code: Optional[str] = None, seller: Optional[str] = None, page: int = 1, size: int = 100) -> dict:
-        query = f"size={size}&page={page}"
-        if item_code:
-            query += f"&item_code={item_code}"
-        if seller:
-            query += f"&seller={seller}"
-        endpoint = f"grandexchange/orders?{query}"
-        return self.api._make_request("GET", endpoint, source="get_ge_sell_orders").get("data")
-
-    def get_sell_order(self, order_id: str) -> dict:
-        endpoint = f"grandexchange/orders/{order_id}"
-        return self.api._make_request("GET", endpoint, source="get_ge_sell_order").get("data")
-    
-    def buy(self, order_id: str, quantity: int = 1) -> dict:
-        endpoint = f"my/{self.api.char.name}/action/grandexchange/buy"
-        json = {"id": order_id, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json, source="ge_buy")
-        return res
-
-    def sell(self, item_code: str, price: int, quantity: int = 1) -> dict:
-        endpoint = f"my/{self.api.char.name}/action/grandexchange/sell"
-        json = {"code": item_code, "item_code": price, "quantity": quantity}
-        res = self.api._make_request("POST", endpoint, json=json, source="ge_sell")
-        return res
-
-    def cancel(self, order_id: str) -> dict:
-        endpoint = f"my/{self.api.char.name}/action/grandexchange/cancel"
-        json = {"id": order_id}
-        res = self.api._make_request("POST", endpoint, json=json, source="ge_cancel_sell")
-        return res
-
-class Leaderboard:
-    def __init__(self, api):
-        self.api = api
-    
-    def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
-        query = "size=100"
-        if sort:
-            query += f"&sort={sort}"
-        query += f"&page={page}"
-        endpoint = f"leaderboard/characters?{query}"
-        return self.api._make_request("GET", endpoint, source="get_characters_leaderboard")
-
-    def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
-        query = "size=100"
-        if sort:
-            query += f"&sort={sort}"
-        query += f"&page={page}"
-        endpoint = f"leaderboard/accounts?{query}"
-        return self.api._make_request("GET", endpoint, source="get_accounts_leaderboard")
-
-class Accounts:
-    def __init__(self, api):
-        self.api = api
-    
-    def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:
-        query = "size=100"
-        if completed is not None:
-            query += f"&completed={str(completed).lower()}"
-        if achievement_type:
-            query += f"&achievement_type={achievement_type}"
-        query += f"&page={page}"
-        endpoint = f"/accounts/{account}/achievements?{query}"
-        return self.api._make_request("GET", endpoint, source="get_account_achievements")
-
-    def get_account(self, account: str):
-        endpoint = f"/acounts/{account}"
-        return self.api._make_request("GET", endpoint, source="get_account")
-
 
 # --- Wrapper ---
 class ArtifactsAPI:
@@ -143,7 +43,21 @@ class ArtifactsAPI:
         self.character_name = character_name
         self.char: Optional[PlayerData] = None
         self._initialize_character(character_name)
-        self._initialize_subclasses()
+        self.account = Account(self)
+        self.character = Character(self)
+        self.actions = Actions(self)
+        self.maps = Maps(self)
+        self.items = Items(self)
+        self.monsters = Monsters(self)
+        self.resources = Resources(self)
+        self.events = Events(self)
+        self.ge = GE(self)
+        self.tasks = Tasks(self)
+        self.task_rewards = Rewards(self)
+        self.achievements = Achievements(self)
+        self.leaderboard = Leaderboard(self)
+        self.accounts = Accounts(self)
+        #self.content_maps = ContentMaps(self)
 
     def _initialize_character(self, character_name: str) -> None:
         """Separate character initialization for better error handling."""
@@ -152,30 +66,7 @@ class ArtifactsAPI:
         except Exception as e:
             self.logger.error(f"Failed to initialize character: {e}")
             raise
-
-    def _initialize_subclasses(self) -> None:
-        """Initialize all subclasses in a more maintainable way."""
-        self.subclasses = {
-            'account': Account,
-            'character': Character,
-            'actions': Actions,
-            'maps': Maps,
-            'items': Items,
-            'monsters': Monsters,
-            'resources': Resources,
-            'events': Events,
-            'ge': GE,
-            'tasks': Tasks,
-            'task_rewards': Rewards,
-            'achievements': Achievements,
-            'leaderboard': Leaderboard,
-            'accounts': Accounts,
-            'content_maps': ContentMaps,
-        }
-        
-        for name, cls in self.subclasses.items():
-            setattr(self, name, cls(self))
-
+            
     @with_cooldown
     def _make_request(self, method: str, endpoint: str, json: Optional[dict] = None, 
                     source: Optional[str] = None, retries: int = 3, 
@@ -233,25 +124,26 @@ class ArtifactsAPI:
         version = self._make_request(endpoint="", method="GET").get("data").get("version")
         return version
     
-    def _cache(self):
+    def _cache(self, force=False):
         cache_db_cursor.execute("SELECT v FROM cache_table WHERE k = 'Cache Expiration'")
         cache_expiration = cache_db_cursor.fetchone() or None
         now = datetime.now()
             
-        if cache_expiration is None or datetime.strptime(cache_expiration[0], '%Y-%m-%d %H:%M:%S.%f') < now:
+        if cache_expiration is None or datetime.strptime(cache_expiration[0], '%Y-%m-%d %H:%M:%S.%f') < now or force:
             cache_db_cursor.execute(
                 "INSERT or REPLACE INTO cache_table (k, v) VALUES (?, ?)", 
                 ("Cache Expiration", datetime.now() + timedelta(days=2))
             )
             cache_db.commit()
-            print("Recached the following cache tables:")
-            self.maps._cache_maps()
-            self.items._cache_items()
-            self.monsters._cache_monsters()
-            self.resources._cache_resources()
+            print("Recaching...")
+            self.maps._cache_maps(force=force)
+            self.items._cache_items(force=force)
+            self.monsters._cache_monsters(force=force)
+            self.resources._cache_resources(force=force)
             self.tasks._cache_tasks()
-            self.task_rewards._cache_rewards()
-            self.achievements._cache_achievements()
+            self.task_rewards._cache_rewards(force=force)
+            self.achievements._cache_achievements(force=force)
+            #self.content_maps._cache_content_maps(force=force)
 
     def _raise(self, code: int, m: str) -> None:
         """
@@ -314,7 +206,7 @@ class ArtifactsAPI:
             case 491:
                 raise APIException.EquipmentSlot(m)
             case 490:
-                logger.warning(m, extra={"char": self.char.name})
+                logger.warning(m, src=self.char.name)
             case 452:
                 raise APIException.TokenMissingorEmpty(m)
             case _:

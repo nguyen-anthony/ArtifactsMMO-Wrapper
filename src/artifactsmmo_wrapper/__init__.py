@@ -27,6 +27,8 @@ class ArtifactsWrapper:
         if not self._api or self._api.character_name != name:
             self._api = ArtifactsAPI(config.token, name)
         return self._api
+    
+    
 
 # Create global wrapper instance
 wrapper = ArtifactsWrapper()

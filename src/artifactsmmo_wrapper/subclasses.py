@@ -96,7 +96,7 @@ class Character:
         json = {"name": name}
         return self.api._make_request("POST", endpoint, json=json, source="delete_character")
 
-    def get_logs(self, page: int = 1) -> dict:
+    def get_logs(self, page: int = 1, name: str = None) -> dict:
         """_summary_
 
         Args:
@@ -105,8 +105,10 @@ class Character:
         Returns:
             dict: Response data with character logs
         """
-        query = f"size=100&page={page}"
-        endpoint = f"my/logs?{query}"
+        query = f"?size=100&page={page}"
+        if name:
+            query = f"/{name}?size=100&page={page}"
+        endpoint = f"my/logs{query}"
         self.api._make_request("GET", endpoint, source="get_logs")
 
 class Actions:

@@ -3,9 +3,37 @@ from .helpers import _re_cache
 import math
 import json
 from typing import Optional, List, Dict, Any, Union
-from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect
+from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect, NPC, NPC_Items, Basic_Item, Effects
 from .log import logger
 import sqlite3
+
+class Server:
+    def __init__(self, api):
+        """
+        Initialize with a reference to the main API to access shared methods.
+
+        Args:
+            api (ArtifactsAPI): Instance of the main class.
+        """
+        logger.debug("Initializing Server class", src="Root")
+        self.api = api
+    
+    def status(self) -> dict:
+        return self.api._make_request("GET", "", source="get_server_status")
+    
+    def badges(self, code: str = None) -> dict:
+        """
+        Retrieve the list of available badges on the server.
+        
+        Returns:
+            dict: Response data containing badge details.
+        """
+        if code:
+            query = f"/{code}"
+        endpoint = f"badges{query}"
+        return self.api._make_request("GET", endpoint, source="get_badges")
+    
+
 
 class Account:
     
@@ -54,6 +82,7 @@ class Account:
         """Retrieve details of the player's account."""
         endpoint = "my/details"
         return self.api._make_request("GET", endpoint, source="get_account_details")
+    
 
 class Character:
     def __init__(self, api):
@@ -110,6 +139,51 @@ class Character:
             query = f"/{name}?size=100&page={page}"
         endpoint = f"my/logs{query}"
         self.api._make_request("GET", endpoint, source="get_logs")
+
+    def change_skin(self, skin: str) -> dict:
+        """
+        Change the character's skin.
+
+        Args:
+            skin (str): The new skin choice for the character.
+
+        Returns:
+            dict: Response data confirming the skin change.
+        """
+        endpoint = f"my/{self.api.char.name}/action/change-skin"
+        json = {"skin": skin}
+        return self.api._make_request("POST", endpoint, json=json, source="change_skin")
+
+    def give_item(self, items: List[Basic_Item], target: str) -> dict:
+        """
+        Give an item to another character.
+
+        Args:
+            name (str): The code of the item to give.
+            items (List[Dict[str, int]]): The items to give, each represented as a dictionary with 'code' and 'quantity'.
+            target (str): The name of the target character.
+
+        Returns:
+            dict: Response data confirming the item transfer.
+        """
+        endpoint = f"my/{self.api.char.name}/action/give/item"
+        json = {"items": [{"code": item.code, "quantity": item.quantity} for item in items], "character": target}
+        return self.api._make_request("POST", endpoint, json=json, source="give_item")
+    
+    def give_gold(self, quantity: int, target: str) -> dict:
+        """
+        Give gold to another character.
+
+        Args:
+            quantity (int): The amount of gold to give.
+            target (str): The name of the target character.
+
+        Returns:
+            dict: Response data confirming the gold transfer.
+        """
+        endpoint = f"my/{self.api.char.name}/action/give/gold"
+        json = {"quantity": quantity, "character": target}
+        return self.api._make_request("POST", endpoint, json=json, source="give_gold")
 
 class Actions:
     def __init__(self, api):
@@ -289,7 +363,7 @@ class Actions:
             dict: Response data confirming the deposit.
         """
         quantity = quantity if quantity < 0 else 1
-        endpoint = f"my/{self.api.char.name}/action/bank/deposit"
+        endpoint = f"my/{self.api.char.name}/action/bank/deposit/item"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_item")
         return res
@@ -322,7 +396,7 @@ class Actions:
             dict: Response data confirming the withdrawal.
         """
         quantity = quantity if quantity < 0 else 1
-        endpoint = f"my/{self.api.char.name}/action/bank/withdraw"
+        endpoint = f"my/{self.api.char.name}/action/bank/withdraw/item"
         json = {"code": item_code, "quantity": quantity}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_item")
         return res
@@ -352,6 +426,38 @@ class Actions:
         """
         endpoint = f"my/{self.api.char.name}/action/bank/buy_expansion"
         res = self.api._make_request("POST", endpoint, source="bank_buy_expansion")
+        return res
+    
+    def npc_buy(self, code: str, quantity: int):
+        """
+        Buy an item from an NPC.
+
+        Args:
+            code (str): Code of the item to buy.
+            quantity (int): Quantity of the item to buy.
+
+        Returns:
+            dict: Response data confirming the purchase.
+        """
+        endpoint = f"my/{self.api.char.name}/action/npc/buy"
+        json = {"code": code, "quantity": quantity}
+        res = self.api._make_request("POST", endpoint, json=json, source="npc_buy")
+        return res
+
+    def npc_sell(self, code: str, quantity: int):
+        """
+        Sell an item to an NPC.
+
+        Args:
+            code (str): Code of the item to sell.
+            quantity (int): Quantity of the item to sell.
+
+        Returns:
+            dict: Response data confirming the sale.
+        """
+        endpoint = f"my/{self.api.char.name}/action/npc/sell"
+        json = {"code": code, "quantity": quantity}
+        res = self.api._make_request("POST", endpoint, json=json, source="npc_sell")
         return res
 
 
@@ -1242,7 +1348,7 @@ class Events:
         endpoint = f"events/active?{query}"
         return self.api._make_request("GET", endpoint, source="get_active_events").get("data")
 
-    def get_all(self, page: int = 1) -> dict:
+    def get_all(self, event_type: str, page: int = 1) -> dict:
         """
         Retrieve a list of all events.
 
@@ -1253,6 +1359,8 @@ class Events:
             dict: Response data with a list of events.
         """
         query = f"size=100&page={page}"
+        if event_type:
+            query += f"&type={event_type}"
         endpoint = f"events?{query}"
         return self.api._make_request("GET", endpoint, source="get_all_events").get("data")
 
@@ -1381,7 +1489,7 @@ class Leaderboard:
         logger.debug("Initializing Leaderboard class", src="Root")
         self.api = api
     # --- Leaderboard Functions ---
-    def get_characters_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+    def get_characters_leaderboard(self, name: str, sort: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the characters leaderboard with optional sorting.
 
@@ -1393,13 +1501,15 @@ class Leaderboard:
             dict: Response data with the characters leaderboard.
         """
         query = "size=100"
+        if name:
+            query += f"&name={name}"
         if sort:
             query += f"&sort={sort}"
         query += f"&page={page}"
         endpoint = f"leaderboard/characters?{query}"
         return self.api._make_request("GET", endpoint, source="get_characters_leaderboard")
 
-    def get_accounts_leaderboard(self, sort: Optional[str] = None, page: int = 1) -> dict:
+    def get_accounts_leaderboard(self, name: str, sort: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve the accounts leaderboard with optional sorting.
 
@@ -1411,6 +1521,8 @@ class Leaderboard:
             dict: Response data with the accounts leaderboard.
         """
         query = "size=100"
+        if name:
+            query += f"&name={name}"
         if sort:
             query += f"&sort={sort}"
         query += f"&page={page}"
@@ -1427,7 +1539,20 @@ class Accounts:
         """
         logger.debug("Initializing Accounts class", src="Root")
         self.api = api
+
     # --- Accounts Functions ---
+    def get_characters(self, account_name: str) -> dict:
+        """
+        Retrieve a list of all characters associated with the account.
+
+        Returns:
+            dict: Response data containing character details.
+        """
+        endpoint = f"accounts/{account_name}/characters"
+        return self.api._make_request("GET", endpoint, source="get_accounts_characters")
+
+
+    
     def get_account_achievements(self, account: str, completed: Optional[bool] = None, achievement_type: Optional[str] = None, page: int = 1) -> dict:
         """
         Retrieve a list of achievements for a specific account with optional filters.
@@ -1454,3 +1579,429 @@ class Accounts:
     def get_account(self, account: str):
         endpoint = f"/acounts/{account}"
         return self.api._make_request("GET", endpoint, source="get_account")
+
+    def change_password(self, current_password=None, new_password=None) -> dict:
+        """Change the player's account password."""
+        endpoint = "my/change_password"
+        body = {
+            "current_password": current_password,
+            "new_password": new_password
+        }
+        return self.api._make_request("POST", endpoint, json=body, source="account_change_password")
+    
+    def forgot_password(self, email) -> dict:
+        """Request a password reset for the player's account."""
+        endpoint = "accounts/forgot_password"
+        body = {"email": email}
+        return self.api._make_request("POST", endpoint, json=body, source="account_forgot_password")
+    
+    def reset_password(self, token, new_password) -> dict:
+        """Reset the player's account password using a token."""
+        endpoint = "accounts/reset_password"
+        body = {
+            "token": token,
+            "new_password": new_password
+        }
+        return self.api._make_request("POST", endpoint, json=body, source="account_reset_password")
+
+
+class NPC(BaseCache):
+    def __init__(self, api):
+        logger.debug("Initializing NPC class", src="Root")
+        self.api = api
+        self.cache = {}
+        self.all_npcs = []
+
+    def _cache_npcs(self, force=False):
+        if _re_cache(self.api, "npc_cache") or force:
+            # Create table
+            cache_db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS npc_cache (
+                name TEXT NOT NULL,
+                code TEXT NOT NULL,
+                description TEXT,
+                type TEXT,
+                PRIMARY KEY (code)
+            )
+            """)
+            cache_db.commit()
+
+            endpoint = "npcs/details?size=1"
+            res = self.api._make_request("GET", endpoint, source="get_all_npcs")
+            pages = math.ceil(int(res["pages"]) / 100)
+            
+            logger.debug(f"Caching {pages} pages of npcs", src=self.api.char.name)
+            
+            all_npcs = []
+            for i in range(pages):
+                endpoint = f"npcs/details?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_npcs")
+                npc_list = res["data"]
+                
+                for npc_item in npc_list:
+                    name = npc_item['name']
+                    code = npc_item['code']
+                    description = npc_item["description"]
+                    npc_type = npc_item["type"]
+                    
+                    # Insert or replace the npc into the database
+                    cache_db_cursor.execute("""
+                    INSERT OR REPLACE INTO npc_cache (name, code, description, type)
+                    VALUES (?, ?, ?, ?)
+                    """, (name, code, description, npc_type))
+                    
+                    all_npcs.append(npc_item)
+
+            cache_db.commit()
+            self.cache = {f"{item["code"]}": item for item in all_npcs}
+            self.all_npcs = all_npcs
+
+            logger.debug(f"Finished caching {len(all_npcs)} npcs", src=self.api.char.name)
+
+    def _filter_npcs(self, name=None, npc_type=None):
+        query = "SELECT * FROM npc_cache WHERE 1=1"
+        params = []
+
+        if name:
+            query += " AND name LIKE ?"
+            params.append(f"%{name}%")
+
+        if npc_type:
+            query += " AND type LIKE ?"
+            params.append(npc_type)
+
+        cache_db_cursor.execute(query, params)
+        return cache_db_cursor.fetchall()
+
+    def get(self, code=None, **filters):
+        """
+        Retrieves npcs based on coordinates or filters.
+
+        Args:
+            code (str, optional): NPC code for direct lookup
+            **filters: Optional filter parameters
+        """
+        if not self.all_npcs:
+            self._cache_npcs()
+        
+        if code is not None:
+            query = "SELECT * FROM npc_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code))
+            row = cache_db_cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_npc(row)
+        
+        return [self._row_to_npc(row) for row in self._filter_npcs(**filters)]
+
+    def _row_to_npc(self, row):
+        return NPC(
+            name=row['name'],
+            code=row['code'],
+            description=row['description'],
+            type=row['type']
+        )
+
+class Effect(BaseCache):
+    def __init__(self, api):
+        logger.debug("Initializing Effect class", src="Root")
+        self.api = api
+        self.cache = {}
+        self.all_effects = []
+
+    def _cache_effects(self, force=False):
+        if _re_cache(self.api, "effect_cache") or force:
+            # Create table
+            cache_db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS effect_cache (
+                name TEXT NOT NULL,
+                code TEXT NOT NULL,
+                description TEXT,
+                effect_type TEXT,
+                effect_subtype TEXT,
+                PRIMARY KEY (code)
+            )
+            """)
+            cache_db.commit()
+
+            endpoint = "effects/details?size=1"
+            res = self.api._make_request("GET", endpoint, source="get_all_effects")
+            pages = math.ceil(int(res["pages"]) / 100)
+            
+            logger.debug(f"Caching {pages} pages of effects", src=self.api.char.name)
+            
+            all_effects = []
+            for i in range(pages):
+                endpoint = f"effects/details?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_effects")
+                effect_list = res["data"]
+                
+                for effect_item in effect_list:
+                    name = effect_item['name']
+                    code = effect_item['code']
+                    description = effect_item["description"]
+                    effect_type = effect_item["effect_type"]
+                    effect_subtype = effect_item["effect_subtype"]
+                    
+                    # Insert or replace the effect into the database
+                    cache_db_cursor.execute("""
+                    INSERT OR REPLACE INTO effect_cache (name, code, description, effect_type, effect_subtype)
+                    VALUES (?, ?, ?, ?, ?)
+                    """, (name, code, description, effect_type, effect_subtype))
+                    
+                    all_effects.append(effect_item)
+
+            cache_db.commit()
+            self.cache = {f"{item['code']}": item for item in all_effects}
+            self.all_effects = all_effects
+
+            logger.debug(f"Finished caching {len(all_effects)} effects", src=self.api.char.name)
+
+    def _filter_effects(self, name=None, effect_type=None, effect_subtype=None):
+        query = "SELECT * FROM effect_cache WHERE 1=1"
+        params = []
+
+        if name:
+            query += " AND name LIKE ?"
+            params.append(f"%{name}%")
+
+        if effect_type:
+            query += " AND effect_type LIKE ?"
+            params.append(effect_type)
+
+        if effect_subtype:
+            query += " AND effect_subtype LIKE ?"
+            params.append(effect_subtype)
+
+        cache_db_cursor.execute(query, params)
+        return cache_db_cursor.fetchall()
+
+    def get(self, code=None, **filters):
+        """
+        Retrieves effects based on code or filters.
+
+        Args:
+            code (str, optional): Effect code for direct lookup
+            **filters: Optional filter parameters
+        """
+        if not self.all_effects:
+            self._cache_effects()
+        
+        if code is not None:
+            query = "SELECT * FROM effect_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_effect(row)
+        
+        return [self._row_to_effect(row) for row in self._filter_effects(**filters)]
+
+    def _row_to_effect(self, row):
+        return Effect(
+            name=row['name'],
+            code=row['code'],
+            description=row['description'],
+            effect_type=row['effect_type'],
+            effect_subtype=row['effect_subtype']
+        )
+    
+class NPC_Items(BaseCache):
+    def __init__(self, api):
+        logger.debug("Initializing NPC Items class", src="Root")
+        self.api = api
+        self.cache = {}
+        self.all_npc_items = []
+
+    def _cache_npc_items(self, force=False):
+        if _re_cache(self.api, "npc_item_cache") or force:
+            # Create table
+            cache_db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS npc_item_cache (
+                code TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                npc TEXT,
+                PRIMARY KEY (code)
+            )
+            """)
+            cache_db.commit()
+
+            endpoint = "npcs/items?size=1"
+            res = self.api._make_request("GET", endpoint, source="get_all_npc_items")
+            pages = math.ceil(int(res["pages"]) / 100)
+            
+            logger.debug(f"Caching {pages} pages of npc_items", src=self.api.char.name)
+            
+            all_npc_items = []
+            for i in range(pages):
+                endpoint = f"npcs/items?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_npc_items")
+                npc_item_list = res["data"]
+                
+                for npc_item_item in npc_item_list:
+                    code = npc_item_item["code"]
+                    currency = npc_item_item["currency"]
+                    npc = npc_item_item["npc"]
+
+                    # Insert or replace the npc_item into the database
+                    cache_db_cursor.execute("""
+                    INSERT OR REPLACE INTO npc_item_cache (code, currency, npc)
+                    VALUES (?, ?, ?, ?)
+                    """, (code))
+                    
+                    all_npc_items.append(npc_item_item)
+
+            cache_db.commit()
+            self.cache = {f"{item["code"]}": item for item in all_npc_items}
+            self.all_npc_items = all_npc_items
+
+            logger.debug(f"Finished caching {len(all_npc_items)} npc_items", src=self.api.char.name)
+
+    def _filter_npc_items(self, currency=None, npc=None):
+        query = "SELECT * FROM npc_cache WHERE 1=1"
+        params = []
+
+        if currency:
+            query += " AND currency LIKE ?"
+            params.append(f"%{currency}%")
+
+        if npc:
+            query += " AND npc LIKE ?"
+            params.append(npc)
+
+        cache_db_cursor.execute(query, params)
+        return cache_db_cursor.fetchall()
+
+    def get(self, code=None, **filters):
+        """
+        Retrieves npc_items based on coordinates or filters.
+
+        Args:
+            code (str, optional): NPC code for direct lookup
+            **filters: Optional filter parameters
+        """
+        if not self.all_npc_items:
+            self._cache_npc_items()
+        
+        if code is not None:
+            query = "SELECT * FROM npc_item_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code))
+            row = cache_db_cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_npc_item(row)
+        
+        return [self._row_to_npc_item(row) for row in self._filter_npc_items(**filters)]
+
+    def _row_to_npc_item(self, row):
+        return NPC_Items(
+            code=row["code"],
+            currency=row["currency"],
+            npc=row["npc"]
+        )
+
+
+class Effect(BaseCache):
+    def __init__(self, api):
+        logger.debug("Initializing Effect class", src="Root")
+        self.api = api
+        self.cache = {}
+        self.all_effects = []
+
+    def _cache_effects(self, force=False):
+        if _re_cache(self.api, "effect_cache") or force:
+            # Create table
+            cache_db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS effect_cache (
+                name TEXT NOT NULL,
+                code TEXT NOT NULL,
+                description TEXT,
+                effect_type TEXT,
+                effect_subtype TEXT,
+                PRIMARY KEY (code)
+            )
+            """)
+            cache_db.commit()
+
+            endpoint = "effects/details?size=1"
+            res = self.api._make_request("GET", endpoint, source="get_all_effects")
+            pages = math.ceil(int(res["pages"]) / 100)
+            
+            logger.debug(f"Caching {pages} pages of effects", src=self.api.char.name)
+            
+            all_effects = []
+            for i in range(pages):
+                endpoint = f"effects/details?size=100&page={i+1}"
+                res = self.api._make_request("GET", endpoint, source="get_all_effects")
+                effect_list = res["data"]
+                
+                for effect_item in effect_list:
+                    name = effect_item['name']
+                    code = effect_item['code']
+                    description = effect_item["description"]
+                    effect_type = effect_item["effect_type"]
+                    effect_subtype = effect_item["effect_subtype"]
+                    
+                    # Insert or replace the effect into the database
+                    cache_db_cursor.execute("""
+                    INSERT OR REPLACE INTO effect_cache (name, code, description, effect_type, effect_subtype)
+                    VALUES (?, ?, ?, ?, ?)
+                    """, (name, code, description, effect_type, effect_subtype))
+                    
+                    all_effects.append(effect_item)
+
+            cache_db.commit()
+            self.cache = {f"{item['code']}": item for item in all_effects}
+            self.all_effects = all_effects
+
+            logger.debug(f"Finished caching {len(all_effects)} effects", src=self.api.char.name)
+
+    def _filter_effects(self, name=None, effect_type=None, effect_subtype=None):
+        query = "SELECT * FROM effect_cache WHERE 1=1"
+        params = []
+
+        if name:
+            query += " AND name LIKE ?"
+            params.append(f"%{name}%")
+
+        if effect_type:
+            query += " AND effect_type LIKE ?"
+            params.append(effect_type)
+
+        if effect_subtype:
+            query += " AND effect_subtype LIKE ?"
+            params.append(effect_subtype)
+
+        cache_db_cursor.execute(query, params)
+        return cache_db_cursor.fetchall()
+
+    def get(self, code=None, **filters):
+        """
+        Retrieves effects based on code or filters.
+
+        Args:
+            code (str, optional): Effect code for direct lookup
+            **filters: Optional filter parameters
+        """
+        if not self.all_effects:
+            self._cache_effects()
+        
+        if code is not None:
+            query = "SELECT * FROM effect_cache WHERE code = ?"
+            cache_db_cursor.execute(query, (code,))
+            row = cache_db_cursor.fetchone()
+            if row is None:
+                return None
+            return self._row_to_effect(row)
+        
+        return [self._row_to_effect(row) for row in self._filter_effects(**filters)]
+
+    def _row_to_effect(self, row):
+        return Effects(
+            name=row['name'],
+            code=row['code'],
+            description=row['description'],
+            effect_type=row['effect_type'],
+            effect_subtype=row['effect_subtype']
+        )
+    

@@ -155,6 +155,35 @@ class Achievement:
     total: int
     rewards_gold: int
 
+@dataclass
+class NPC:
+    name: str
+    code: str
+    description: Optional[str] = None
+    type: Optional[str] = None
+
+    def __repr__(self) -> str:
+        return f"({self.code}) {self.name} ({self.type})\n  {self.description if self.description else 'No description available.'}"
+
+@dataclass
+class NPC_Items:
+    code: str
+    currency: str
+    npc: str
+
+@dataclass
+class Basic_Item:
+    code: str
+    quantity: int
+
+@dataclass
+class Effect:
+    name: str
+    code: str
+    description: str
+    effect_type: str
+    effect_subtype: str
+
 # --- Other ---
 
 class ContentMaps:

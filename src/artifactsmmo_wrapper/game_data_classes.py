@@ -37,21 +37,21 @@ class Drop:
     min_quantity: int
     max_quantity: int
 
-@dataclass
-class ContentMap:
-    name: str
-    code: str
-    level: int
-    skill: str
-    pos: Position
-    drops: List[Drop]
-
-    def __iter__(self):
-        yield self.pos.x
-        yield self.pos.y
-
-    def __repr__(self) -> str:
-        return f"{self.name} ({self.code}) at {self.pos}\n  Requires {self.skill} level {self.level}"
+#@dataclass
+#class ContentMap:
+#    name: str
+#    code: str
+#    level: int
+#    skill: str
+#    pos: Position
+#    drops: List[Drop]
+#
+#    def __iter__(self):
+#        yield self.pos.x
+#        yield self.pos.y
+#
+#    def __repr__(self) -> str:
+#        return f"{self.name} ({self.code}) at {self.pos}\n  Requires {self.skill} level {self.level}"
     
 @dataclass
 class Content:
@@ -185,124 +185,6 @@ class _Effect:
     effect_subtype: str
 
 # --- Other ---
-
-class ContentMaps:
-    def __init__(self, api):
-        logger.debug("Initializing ContentMaps", src="Root")
-        self.api = api
-        self.maps: Dict[str, ContentMap] = {}  # Initialize the maps attribute as an empty dictionary
-        self._cache_content_maps()
-        self._initialize_attributes()
-
-
-    def _cache_content_maps(self, force=False):
-        """
-        Fetch all content maps using `api.maps.get` and populate them based on content type.
-        """
-        try:
-            logger.debug("Fetching all maps using api.maps.get()", src=self.api.char.name)
-            all_maps = self.api.maps.get()  # Use the updated `get` method
-            logger.debug(f"Retrieved {len(all_maps)} maps from the API", src=self.api.char.name)
-
-            # Process each map and populate the maps dictionary
-            for map_data in all_maps:
-                x, y = map_data.x, map_data.y
-                content_type = map_data.content_type
-                content_code = map_data.content_code
-
-                # Fetch content-specific data
-                if content_type == "monster":
-                    monster = self.api.monsters.get(content_code)
-                    name = monster.name
-                    level = monster.level
-                    skill = "combat"
-                    drops = monster.drops
-                elif content_type == "resource":
-                    resource = self.api.resources.get(content_code)
-                    name = resource.name
-                    level = resource.level
-                    skill = resource.skill
-                    drops = resource.drops
-                elif content_type == "workshop":
-                    name = f"{content_code.capitalize()} Workshop"
-                    level = None
-                    skill = None
-                    drops = []
-                elif content_type == "":
-                    continue
-                else:
-                    name = f"{content_code.capitalize()}"
-                    level = None
-                    skill = None
-                    drops = []
-
-                position = Position(x, y)
-                content_map = ContentMap(
-                    name=name,
-                    code=content_code,
-                    level=level,
-                    skill=skill,
-                    pos=position,
-                    drops=drops
-                )
-
-                # Handle duplicates based on Manhattan distance from (0, 0)
-                if content_code in self.maps:
-                    existing_map = self.maps[content_code]
-                    new_distance = position.dist(Position(0, 0))
-                    existing_distance = existing_map.pos.dist(Position(0, 0))
-                    if new_distance < existing_distance:
-                        self.maps[content_code] = content_map
-                else:
-                    self.maps[content_code] = content_map
-
-            logger.debug(f"Finished caching {len(self.maps)} content maps", src=self.api.char.name)
-
-        except Exception as e:
-            logger.error(f"Error while caching content maps: {e}", src="Root")
-
-    def _initialize_attributes(self):
-        """
-        Dynamically create attributes for each content map.
-        """
-        for map_code, content_map in self.maps.items():
-            attribute_name = self._sanitize_attribute_name(map_code)
-            setattr(self, attribute_name, content_map)
-
-    @staticmethod
-    def _sanitize_attribute_name(name: str) -> str:
-        """
-        Sanitize map codes to create valid Python attribute names.
-
-        Args:
-            name (str): The original map code.
-
-        Returns:
-            str: A sanitized attribute name.
-        """
-        return name.lower().replace(" ", "_").replace("-", "_")
-
-    def get_map(self, code: str) -> Optional[ContentMap]:
-        """
-        Retrieve a specific content map by its code.
-
-        Args:
-            code (str): The unique code for the content map.
-
-        Returns:
-            ContentMap or None: The content map if found, otherwise None.
-        """
-        return self.maps.get(code)
-
-    def get_all_maps(self) -> List[ContentMap]:
-        """
-        Retrieve all cached content maps.
-
-        Returns:
-            List[ContentMap]: List of all cached content maps.
-        """
-        return list(self.maps.values())
-
 @dataclass
 class InventoryItem:
     """Represents an item in the player's inventory."""

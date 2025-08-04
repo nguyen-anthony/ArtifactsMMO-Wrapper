@@ -96,8 +96,7 @@ class Item:
 
 @dataclass
 class Map:
-    x: int
-    y: int
+    pos: Position
     content_code: Optional[str]
     content_type: Optional[str]
 

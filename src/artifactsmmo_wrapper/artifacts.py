@@ -5,7 +5,7 @@ from threading import Thread
 from datetime import timedelta, datetime
 from typing import List, Dict, Optional
 
-from .game_data_classes import PlayerData, ContentMaps, InventoryItem, Position
+from .game_data_classes import PlayerData, InventoryItem, Position
 from .exceptions import APIException
 from .helpers import CooldownManager, with_cooldown
 from .subclasses import (
@@ -148,6 +148,9 @@ class ArtifactsAPI:
             self.tasks._cache_tasks()
             self.task_rewards._cache_rewards(force=force)
             self.achievements._cache_achievements(force=force)
+            self.npcs._cache_npcs(force=force)
+            self.npc_items._cache_npc_items(force=force)
+            self.effects._cache_effects(force=force)
             #self.content_maps._cache_content_maps(force=force)
 
     def _raise(self, code: int, m: str) -> None:

@@ -769,8 +769,7 @@ class Maps(BaseCache):
 
     def _row_to_map(self, row):
         return Map(
-            x=row['x'],
-            y=row['y'],
+            pos=(row['x'], row['y']),
             content_code=row['content_code'],
             content_type=row['content_type']
         )
@@ -1725,7 +1724,7 @@ class Effect(BaseCache):
             """)
             cache_db.commit()
 
-            endpoint = "effects/details?size=1"
+            endpoint = "effects?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_effects")
             pages = math.ceil(int(res["pages"]) / 100)
             
@@ -1733,7 +1732,7 @@ class Effect(BaseCache):
             
             all_effects = []
             for i in range(pages):
-                endpoint = f"effects/details?size=100&page={i+1}"
+                endpoint = f"effects?size=100&page={i+1}"
                 res = self.api._make_request("GET", endpoint, source="get_all_effects")
                 effect_list = res["data"]
                 
@@ -1847,8 +1846,8 @@ class NPC_Items(BaseCache):
                     # Insert or replace the npc_item into the database
                     cache_db_cursor.execute("""
                     INSERT OR REPLACE INTO npc_item_cache (code, currency, npc)
-                    VALUES (?, ?, ?, ?)
-                    """, (code))
+                    VALUES (?, ?, ?)
+                    """, (code, currency, npc))
                     
                     all_npc_items.append(npc_item_item)
 
@@ -1902,7 +1901,7 @@ class NPC_Items(BaseCache):
         )
 
 
-class Effect(BaseCache):
+class Effects(BaseCache):
     def __init__(self, api):
         logger.debug("Initializing Effect class", src="Root")
         self.api = api
@@ -1924,7 +1923,7 @@ class Effect(BaseCache):
             """)
             cache_db.commit()
 
-            endpoint = "effects/details?size=1"
+            endpoint = "effects?size=1"
             res = self.api._make_request("GET", endpoint, source="get_all_effects")
             pages = math.ceil(int(res["pages"]) / 100)
             
@@ -1932,7 +1931,7 @@ class Effect(BaseCache):
             
             all_effects = []
             for i in range(pages):
-                endpoint = f"effects/details?size=100&page={i+1}"
+                endpoint = f"effects?size=100&page={i+1}"
                 res = self.api._make_request("GET", endpoint, source="get_all_effects")
                 effect_list = res["data"]
                 
@@ -1940,8 +1939,8 @@ class Effect(BaseCache):
                     name = effect_item['name']
                     code = effect_item['code']
                     description = effect_item["description"]
-                    effect_type = effect_item["effect_type"]
-                    effect_subtype = effect_item["effect_subtype"]
+                    effect_type = effect_item["type"]
+                    effect_subtype = effect_item["subtype"]
                     
                     # Insert or replace the effect into the database
                     cache_db_cursor.execute("""

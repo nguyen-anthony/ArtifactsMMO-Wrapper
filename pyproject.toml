@@ -9,8 +9,8 @@ name = "artifactsmmo_wrapper"
 # EPOCH = 3 (new wrapper era)
 # MAJOR = 2 (major release in this epoch)
 # MINOR = 0 (new features)
-# PATCH = 1 (bug fixes)
-version = "3200.0.1"
+# PATCH = 2 (bug fixes)
+version = "3200.0.2"
 authors = [
     { name = "Veillax", email = "contact@veillax.com" },
 ]

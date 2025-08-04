@@ -43,7 +43,6 @@ class ArtifactsAPI:
         self.character_name = character_name
         self.char: Optional[PlayerData] = None
         self._initialize_character(character_name)
-        self.server = Server(self)
         self.account = Account(self)
         self.character = Character(self)
         self.actions = Actions(self)
@@ -58,6 +57,8 @@ class ArtifactsAPI:
         self.achievements = Achievements(self)
         self.leaderboard = Leaderboard(self)
         self.accounts = Accounts(self)
+        #I fucking forgot to add these damnit
+        self.server = Server(self)
         self.npcs = NPCs(self)
         self.npc_items = NPC_Items(self)
         self.effects = Effects(self)

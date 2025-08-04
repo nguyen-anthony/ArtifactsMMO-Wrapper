@@ -7,10 +7,10 @@ build-backend = "hatchling.build"
 name = "artifactsmmo_wrapper"
 # Epoch SemVer: {EPOCH * 1000 + MAJOR}.MINOR.PATCH
 # EPOCH = 3 (new wrapper era)
-# MAJOR = 2 (initial release in this epoch)
+# MAJOR = 2 (major release in this epoch)
 # MINOR = 0 (new features)
-# PATCH = 0 (bug fixes)
-version = "3200.0.0"
+# PATCH = 1 (bug fixes)
+version = "3200.0.1"
 authors = [
     { name = "Veillax", email = "contact@veillax.com" },
 ]

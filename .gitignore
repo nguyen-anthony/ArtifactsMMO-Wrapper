@@ -159,7 +159,9 @@ cython_debug/
 
 # Custom
 dev/
-src/artifactsmmo_wrapper/artifacts.db
+dev/*
+artifacts.db
 .vscode/
 db/
+db/*
 artifacts.db

@@ -166,7 +166,7 @@ class NPC:
         return f"({self.code}) {self.name} ({self.type})\n  {self.description if self.description else 'No description available.'}"
 
 @dataclass
-class NPC_Items:
+class NPC_Item:
     code: str
     currency: str
     npc: str
@@ -177,7 +177,7 @@ class Basic_Item:
     quantity: int
 
 @dataclass
-class Effects:
+class _Effect:
     name: str
     code: str
     description: str

@@ -3,7 +3,7 @@ from .helpers import _re_cache
 import math
 import json
 from typing import Optional, List, Dict, Any, Union
-from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect, NPC, NPC_Items, Basic_Item, Effects
+from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect, NPC, NPC_Item, Basic_Item, _Effect
 from .log import logger
 import sqlite3
 
@@ -1605,7 +1605,7 @@ class Accounts:
         return self.api._make_request("POST", endpoint, json=body, source="account_reset_password")
 
 
-class NPC(BaseCache):
+class NPCs(BaseCache):
     def __init__(self, api):
         logger.debug("Initializing NPC class", src="Root")
         self.api = api
@@ -1894,7 +1894,7 @@ class NPC_Items(BaseCache):
         return [self._row_to_npc_item(row) for row in self._filter_npc_items(**filters)]
 
     def _row_to_npc_item(self, row):
-        return NPC_Items(
+        return NPC_Item(
             code=row["code"],
             currency=row["currency"],
             npc=row["npc"]
@@ -1997,7 +1997,7 @@ class Effect(BaseCache):
         return [self._row_to_effect(row) for row in self._filter_effects(**filters)]
 
     def _row_to_effect(self, row):
-        return Effects(
+        return _Effect(
             name=row['name'],
             code=row['code'],
             description=row['description'],

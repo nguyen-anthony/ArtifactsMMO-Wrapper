@@ -1577,7 +1577,7 @@ class Accounts:
 
 
     def get_account(self, account: str):
-        endpoint = f"/acounts/{account}"
+        endpoint = f"/accounts/{account}"
         return self.api._make_request("GET", endpoint, source="get_account")
 
     def change_password(self, current_password=None, new_password=None) -> dict:

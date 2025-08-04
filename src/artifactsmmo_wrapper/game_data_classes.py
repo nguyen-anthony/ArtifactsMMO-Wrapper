@@ -177,7 +177,7 @@ class Basic_Item:
     quantity: int
 
 @dataclass
-class Effect:
+class Effects:
     name: str
     code: str
     description: str

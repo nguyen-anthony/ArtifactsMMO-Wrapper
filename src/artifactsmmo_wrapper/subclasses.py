@@ -420,8 +420,8 @@ class Actions:
         Withdraw an item from the bank.
 
         Args:
-            item_code (str): Code of the item to withdraw.
-            quantity (int): Quantity of the item to withdraw (default is 1).
+            items (List[InventoryItem]): List of InventoryItem objects to withdraw.
+                Each item should have 'code' and 'quantity' attributes.
 
         Returns:
             dict: Response data confirming the withdrawal.

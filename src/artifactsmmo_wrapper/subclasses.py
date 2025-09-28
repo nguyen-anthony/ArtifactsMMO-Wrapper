@@ -3,7 +3,7 @@ from .helpers import _re_cache
 import math
 import json
 from typing import Optional, List, Dict, Any, Union
-from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect, NPC, NPC_Item, Basic_Item, _Effect
+from .game_data_classes import Item, Drop, Reward, Resource, Map, Monster, Task, Achievement, Effect, NPC, NPC_Item, Basic_Item, _Effect, InventoryItem
 #from .game_data_classes import Position, ContentMap
 from .log import logger
 import sqlite3
@@ -363,10 +363,25 @@ class Actions:
         Returns:
             dict: Response data confirming the deposit.
         """
-        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/item"
-        json = {"code": item_code, "quantity": quantity}
+        json = [{"code": item_code, "quantity": max(1, quantity)}]
         res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_item")
+        return res
+    
+    def bank_deposit_multiple_items(self, items: List[InventoryItem]) -> dict:
+        """
+        Deposit a list of items into the bank.
+
+        Args:
+            items (List[InventoryItem]): List of InventoryItem objects to deposit.
+                                    Each item should have 'code' and 'quantity' attributes.
+
+        Returns:
+            dict: Response data confirming the deposit.
+        """
+        endpoint = f"my/{self.api.char.name}/action/bank/deposit/item"
+        json = [{"code": item.code, "quantity": max(1, item.quantity)} for item in items]
+        res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_items")
         return res
 
     def bank_deposit_gold(self, quantity: int) -> dict:
@@ -379,9 +394,8 @@ class Actions:
         Returns:
             dict: Response data confirming the deposit.
         """
-        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/deposit/gold"
-        json = {"quantity": quantity}
+        json = {"quantity": max(1, quantity)}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_deposit_gold")
         return res
 
@@ -396,10 +410,25 @@ class Actions:
         Returns:
             dict: Response data confirming the withdrawal.
         """
-        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/item"
-        json = {"code": item_code, "quantity": quantity}
+        json = [{"code": item_code, "quantity": max(1, quantity)}]
         res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_item")
+        return res
+    
+    def bank_withdraw_multiple_items(self, items: List[InventoryItem]) -> dict:
+        """
+        Withdraw an item from the bank.
+
+        Args:
+            item_code (str): Code of the item to withdraw.
+            quantity (int): Quantity of the item to withdraw (default is 1).
+
+        Returns:
+            dict: Response data confirming the withdrawal.
+        """
+        endpoint = f"my/{self.api.char.name}/action/bank/withdraw/item"
+        json = [{"code": item.item_code, "quantity": max(1, item.quantity)} for item in items]
+        res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_items")
         return res
 
     def bank_withdraw_gold(self, quantity: int) -> dict:
@@ -412,9 +441,8 @@ class Actions:
         Returns:
             dict: Response data confirming the withdrawal.
         """
-        quantity = quantity if quantity < 0 else 1
         endpoint = f"my/{self.api.char.name}/action/bank/withdraw/gold"
-        json = {"quantity": quantity}
+        json = {"quantity": max(1, quantity)}
         res = self.api._make_request("POST", endpoint, json=json, source="bank_withdraw_gold")
         return res
 
